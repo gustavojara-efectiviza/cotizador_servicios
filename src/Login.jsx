@@ -33,7 +33,7 @@ export default function Login() {
             <Zap color="#2563eb" size={32} />
           </div>
         </div>
-        <h2 style={{ color: 'var(--text-primary)', marginBottom: '5px' }}>ZUNZ Cotizador B2B</h2>
+        <h2 style={{ color: 'var(--text-primary)', marginBottom: '5px' }}>SSTT Cotizador B2B</h2>
         <p style={{ color: 'var(--text-secondary)', marginBottom: '30px', textAlign: 'center' }}>Ingresa tus credenciales corporativas para acceder a la plataforma.</p>
 
         <form onSubmit={handleLogin} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>

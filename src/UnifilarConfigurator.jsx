@@ -70,7 +70,7 @@ export default function UnifilarConfigurator({ onAddToCart }) {
       {/* LEFT PANEL - ACCORDIONS */}
       <div className="left-panel" style={{ flex: '1.5', display: 'flex', flexDirection: 'column', gap: '15px', paddingRight: '10px' }}>
         <h2 style={{ color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Zap size={24} /> Configurador Unifilar Interactivo
+          <Zap size={24} /> Configurador de Servicios
         </h2>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '10px' }}>
           Selecciona los equipos de cada zona para añadirlos a tu carrito técnico.
