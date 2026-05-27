@@ -86,7 +86,7 @@ function App() {
   const [adHocState, setAdHocState] = useState({
     equipo: '', tension: '500 kV', horas_equipo: 4, interno: 1, ayudante: 1, externo: 0,
     costo_total_base: 0, is_tercerizado: false, margen_tercerizado: 30, saveToDb: false,
-    categoria: 'zona_otros'
+    categoria: 'zona_otros', costoServiceFee: 0, margenServiceFee: 0, costoAmortizacion: 0, margenAmortizacion: 0
   });
 
   // Unsaved changes & Reset
@@ -126,11 +126,11 @@ function App() {
     if (!equipData) return;
 
     setCart(prev => [...prev, {
-      id: Date.now(),
+      id: crypto.randomUUID(),
       tension,
       equipo,
       cantidad: parseInt(cantidad) || 1,
-      baseData: equipData
+      baseData: structuredClone(equipData)
     }]);
   };
 
@@ -178,11 +178,11 @@ function App() {
     }
     
     setCart(prev => [...prev, {
-      id: Date.now() + Math.random(),
+      id: crypto.randomUUID(),
       tension: item.tension,
       equipo: item.equipo, // Keep the unifilar name for UI
       cantidad: item.cantidad,
-      baseData: equipData
+      baseData: structuredClone(equipData)
     }]);
     setIsDirty(true);
     alert(`✅ ${item.cantidad}x ${item.equipo} (${item.tension}) agregado al carrito.`);
@@ -212,6 +212,10 @@ function App() {
       margen_tercerizado: item.overrides?.margen_tercerizado ?? 30,
       top_down_enabled: item.overrides?.top_down_enabled ?? false,
       valor_inyectado: item.overrides?.valor_inyectado ?? 0,
+      costoServiceFee: item.overrides?.costoServiceFee ?? 0,
+      margenServiceFee: item.overrides?.margenServiceFee ?? 0,
+      costoAmortizacion: item.overrides?.costoAmortizacion ?? 0,
+      margenAmortizacion: item.overrides?.margenAmortizacion ?? 0,
     });
   };
 
@@ -220,9 +224,14 @@ function App() {
   };
 
   const saveOverrides = () => {
+    const finalOverrides = {
+      ...overrideState,
+      top_down_enabled: overrideState.is_tercerizado ? false : overrideState.top_down_enabled,
+      is_tercerizado: overrideState.top_down_enabled ? false : overrideState.is_tercerizado
+    };
     setCart(prev => prev.map(item => 
       item.id === editingItem 
-        ? { ...item, overrides: { ...overrideState } } 
+        ? { ...item, overrides: structuredClone(finalOverrides) } 
         : item
     ));
     setIsDirty(true);
@@ -250,15 +259,20 @@ function App() {
     }
 
     setCart(prev => [...prev, {
-      id: Date.now(),
+      id: crypto.randomUUID(),
       tension: adHocState.tension,
       equipo: adHocState.equipo,
       cantidad: 1,
-      baseData: baseData,
-      overrides: {
+      baseData: structuredClone(baseData),
+      overrides: structuredClone({
         is_tercerizado: adHocState.is_tercerizado,
-        margen_tercerizado: adHocState.margen_tercerizado
-      }
+        costo_total_base: adHocState.costo_total_base,
+        margen_tercerizado: adHocState.margen_tercerizado,
+        costoServiceFee: adHocState.costoServiceFee,
+        margenServiceFee: adHocState.margenServiceFee,
+        costoAmortizacion: adHocState.costoAmortizacion,
+        margenAmortizacion: adHocState.margenAmortizacion,
+      })
     }]);
 
     setIsDirty(true);
@@ -266,7 +280,7 @@ function App() {
   };
 
   const addAlquiler = () => {
-    setAlquileres([...alquileres, { id: Date.now(), descripcion: '', costo: 0 }]);
+    setAlquileres([...alquileres, { id: crypto.randomUUID(), descripcion: '', costo: 0 }]);
     setIsDirty(true);
   };
 
@@ -281,39 +295,10 @@ function App() {
   };
 
   // Calculations
-  const cartWithCalculations = cart.map(item => {
-    const isTercerizado = item.overrides?.is_tercerizado;
-
-    let baseCost = 0;
-    if (isTercerizado) {
-        baseCost = item.overrides?.costo_total_base ?? item.baseData?.costo_total_base ?? 0;
-    } else {
-        const horas_equipo = item.overrides?.horas_equipo ?? item.baseData?.horas_equipo ?? 0;
-        const especialistas = item.overrides?.interno ?? item.baseData?.interno ?? 1;
-        const auxiliares = item.overrides?.ayudante ?? item.baseData?.ayudante ?? 1;
-        const externos = item.overrides?.externo ?? item.baseData?.externo ?? 0;
-        
-        const Costo_Tecnologia = horas_equipo * TARIFA_EQUIPOS_HORA;
-        const Costo_MO_Esp = (horas_equipo / 8) * especialistas * COSTO_ESPECIALISTA_DIA;
-        const Costo_MO_Aux = (horas_equipo / 8) * auxiliares * COSTO_AUXILIAR_DIA;
-        const Costo_MO_Ext = (horas_equipo / 8) * externos * COSTO_EXTERNO_DIA;
-        
-        baseCost = Costo_Tecnologia + Costo_MO_Esp + Costo_MO_Aux + Costo_MO_Ext;
-    }
-
-    const totalCostForQty = baseCost * item.cantidad;
-
-    return {
-      ...item,
-      unitCost: baseCost,
-      totalCost: totalCostForQty
-    };
-  });
-
-  const totalEsfuerzoHoras = cartWithCalculations.reduce((sum, item) => sum + (item.cantidad * (item.overrides?.horas_equipo ?? item.baseData.horas_equipo ?? 0)), 0);
+  const totalEsfuerzoHoras = cart.reduce((sum, item) => sum + (item.cantidad * (item.overrides?.horas_equipo ?? item.baseData.horas_equipo ?? 0)), 0);
 
   // Derivar Top-Down desde el primer ítem que lo tenga activado en el carrito (Para compatibilidad con el engine)
-  const topDownItem = cartWithCalculations.find(item => item.overrides?.top_down_enabled && item.overrides?.valor_inyectado > 0);
+  const topDownItem = cart.find(item => item.overrides?.top_down_enabled && item.overrides?.valor_inyectado > 0);
   const derivedPrecioMercado = topDownItem ? topDownItem.overrides.valor_inyectado : 0;
 
   // Generar Cotización Consolidada para el Motor y el Panel Derecho
@@ -329,7 +314,7 @@ function App() {
     logisticsOverrides: logisticsOverrides
   };
 
-  const resultadosCalculados = calcularCotizacionActiva({ ...cotizacionGlobal, equiposCotizados: cartWithCalculations, alquileres });
+  const resultadosCalculados = calcularCotizacionActiva({ ...cotizacionGlobal, equiposCotizados: structuredClone(cart), alquileres: structuredClone(alquileres) });
 
   const handleLoadCotizacion = (quote) => {
     setCart(quote.equiposCotizados || []);
@@ -528,6 +513,38 @@ function App() {
                       </tr>
                     </>
                   )}
+                  {/* NUEVOS COSTOS FINANCIEROS */}
+                  <tr>
+                    <td colSpan="3" style={{ padding: '10px', fontWeight: 'bold', color: 'var(--text-primary)', background: '#f1f5f9' }}>Costos Adicionales (Opcional)</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '10px' }}>Costo Service Fee (Gs)</td>
+                    <td style={{ padding: '10px', color: '#64748b' }}>0</td>
+                    <td style={{ padding: '10px' }}>
+                      <input type="number" value={overrideState.costoServiceFee} onChange={(e) => setOverrideState({...overrideState, costoServiceFee: parseFloat(e.target.value)||0})} style={{ width: '150px' }} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '10px' }}>Margen Service Fee (%)</td>
+                    <td style={{ padding: '10px', color: '#64748b' }}>0</td>
+                    <td style={{ padding: '10px' }}>
+                      <input type="number" value={overrideState.margenServiceFee} onChange={(e) => setOverrideState({...overrideState, margenServiceFee: parseFloat(e.target.value)||0})} style={{ width: '100px' }} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '10px' }}>Costo Amortización (Gs)</td>
+                    <td style={{ padding: '10px', color: '#64748b' }}>0</td>
+                    <td style={{ padding: '10px' }}>
+                      <input type="number" value={overrideState.costoAmortizacion} onChange={(e) => setOverrideState({...overrideState, costoAmortizacion: parseFloat(e.target.value)||0})} style={{ width: '150px' }} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '10px' }}>Margen Amortización (%)</td>
+                    <td style={{ padding: '10px', color: '#64748b' }}>0</td>
+                    <td style={{ padding: '10px' }}>
+                      <input type="number" value={overrideState.margenAmortizacion} onChange={(e) => setOverrideState({...overrideState, margenAmortizacion: parseFloat(e.target.value)||0})} style={{ width: '100px' }} />
+                    </td>
+                  </tr>
                 </tbody>
               </table>
 
@@ -628,6 +645,25 @@ function App() {
                     </tr>
                   </>
                 )}
+                <tr>
+                  <td colSpan="2" style={{ padding: '10px', fontWeight: 'bold', color: 'var(--text-primary)', background: '#f1f5f9' }}>Costos Adicionales (Opcional)</td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '8px' }}>Costo Service Fee (Gs)</td>
+                  <td><input type="number" value={adHocState.costoServiceFee} onChange={e => setAdHocState({...adHocState, costoServiceFee: parseFloat(e.target.value)||0})} /></td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '8px' }}>Margen Service Fee (%)</td>
+                  <td><input type="number" value={adHocState.margenServiceFee} onChange={e => setAdHocState({...adHocState, margenServiceFee: parseFloat(e.target.value)||0})} /></td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '8px' }}>Costo Amortización (Gs)</td>
+                  <td><input type="number" value={adHocState.costoAmortizacion} onChange={e => setAdHocState({...adHocState, costoAmortizacion: parseFloat(e.target.value)||0})} /></td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '8px' }}>Margen Amortización (%)</td>
+                  <td><input type="number" value={adHocState.margenAmortizacion} onChange={e => setAdHocState({...adHocState, margenAmortizacion: parseFloat(e.target.value)||0})} /></td>
+                </tr>
               </tbody>
             </table>
 
@@ -802,13 +838,13 @@ function App() {
             </div>
             
             <div style={{ maxHeight: '45vh', overflowY: 'auto', paddingRight: '5px' }}>
-              {cartWithCalculations.length === 0 ? (
+              {resultadosCalculados.equiposProcesados.length === 0 ? (
                 <div style={{ padding: '40px 20px', textAlign: 'center', background: '#f1f5f9', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
                   <PackagePlus size={32} color="#94a3b8" style={{ marginBottom: '10px' }} />
                   <p style={{ color: 'var(--text-secondary)', margin: 0 }}>El carrito está vacío. Agrega equipos desde el catálogo.</p>
                 </div>
               ) : (
-                cartWithCalculations.map(item => (
+                resultadosCalculados.equiposProcesados.map(item => (
                   <div key={item.id} className="cart-item" style={{ borderLeft: `4px solid ${item.overrides?.is_tercerizado ? '#a855f7' : 'var(--accent)'}`, background: '#ffffff', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', marginBottom: '0', borderRadius: '0' }}>
                     <div className="cart-item-details" style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '8px' }}>
@@ -829,10 +865,10 @@ function App() {
                           )}
                         </h4>
                       </div>
-                      <p style={{ margin: 0, fontSize: '0.9rem' }}>{item.tension} <span style={{ color: 'var(--border-color)', margin: '0 8px' }}>|</span> {item.overrides?.is_tercerizado ? 'Costo Subcontratista' : 'Costo Unitario'}: {formatGs(item.unitCost)}</p>
+                      <p style={{ margin: 0, fontSize: '0.9rem' }}>{item.tension} <span style={{ color: 'var(--border-color)', margin: '0 8px' }}>|</span> {item.overrides?.is_tercerizado ? 'Costo Subcontratista' : 'Costo Directo Total'}: {formatGs(item.costo_directo_unitario)}</p>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span className="cart-item-price" style={{ fontSize: '1.2rem', color: 'var(--text-primary)' }}>{formatGs(item.totalCost)}</span>
+                      <span className="cart-item-price" style={{ fontSize: '1.2rem', color: 'var(--text-primary)' }}>{formatGs(item.precio_total_final)}</span>
                       <button className="primary-btn" onClick={() => openEditModal(item)} style={{ padding: '8px', width: 'auto', background: '#f8fafc', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px' }} title="Editar Variables Base">
                         <Edit2 size={16} />
                       </button>
@@ -851,7 +887,7 @@ function App() {
             <CRMFinancialPanel 
               resultados={resultadosCalculados} 
               cotizacion={cotizacionGlobal} 
-              equiposCotizados={cartWithCalculations} 
+              equiposCotizados={resultadosCalculados.equiposProcesados} 
               alquileres={alquileres} 
             />
           </div>

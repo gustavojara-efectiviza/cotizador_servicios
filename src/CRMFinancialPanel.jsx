@@ -20,6 +20,10 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
       "Equipo / Servicio", 
       "Cantidad", 
       "Costo Directo Unitario", 
+      "Costo Service Fee",
+      "Margen Service Fee (%)",
+      "Costo Amortización",
+      "Margen Amortización (%)",
       "Estrategia", 
       "% Margen Real",
       "Gasto Admin Unitario", 
@@ -43,6 +47,10 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
         item.equipo, 
         item.cantidad, 
         Math.round(item.costo_directo_unitario || 0),
+        Math.round(item.costoServiceFee || 0),
+        `${item.margenServiceFee || 0}%`,
+        Math.round(item.costoAmortizacion || 0),
+        `${item.margenAmortizacion || 0}%`,
         item.estrategia || 'Normal',
         `${margenReal.toFixed(1)}%`,
         Math.round(item.admin_unitario || 0),
@@ -63,6 +71,10 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
         `Alquiler Especial: ${alq.descripcion}`, 
         1, 
         Math.round(alq.costo_directo_unitario || 0),
+        0,
+        "0%",
+        0,
+        "0%",
         alq.estrategia || 'Alquiler Especial',
         `${margenReal.toFixed(1)}%`,
         Math.round(alq.admin_unitario || 0),
@@ -77,7 +89,7 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
       sumTotal += resultados.Precio_Venta_Logistica;
       
       const costoLogistica = resultados.Logistica_Global_Total || 0;
-      const adminLogistica = costoLogistica * (Variables_Globales.Gastos_Administrativos_Porcentaje / 100);
+      const adminLogistica = 0; // Administrados globalmente
       const utilidadLogistica = resultados.Ganancia_Logistica || 0;
       
       const margenReal = resultados.Precio_Venta_Logistica > 0 ? (utilidadLogistica / resultados.Precio_Venta_Logistica) * 100 : 0;
@@ -86,6 +98,10 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
         `Logística, Movilización y Despliegue`, 
         1, 
         Math.round(costoLogistica),
+        0,
+        "0%",
+        0,
+        "0%",
         "Logística Global",
         `${margenReal.toFixed(1)}%`,
         Math.round(adminLogistica),
@@ -98,7 +114,7 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
     // 4. Imprevistos (Gestión de Riesgos)
     if (resultados.Ganancia_Imprevistos > 0 || resultados.Gastos_Imprevistos > 0) {
       const costoImprevistos = resultados.Gastos_Imprevistos || 0;
-      const adminImprevistos = costoImprevistos * (Variables_Globales.Gastos_Administrativos_Porcentaje / 100);
+      const adminImprevistos = 0; // Administrados globalmente
       const utilidadImprevistos = resultados.Ganancia_Imprevistos || 0;
       const precioImprevistos = costoImprevistos + adminImprevistos + utilidadImprevistos;
       
@@ -110,6 +126,10 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
         `Gestión de Riesgos y Contingencias Operativas`, 
         1, 
         Math.round(costoImprevistos),
+        0,
+        "0%",
+        0,
+        "0%",
         "Gestión de Riesgos",
         `${margenReal.toFixed(1)}%`,
         Math.round(adminImprevistos),
@@ -118,12 +138,28 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
         Math.round(precioImprevistos)
       ]);
     }
-    
+    // 5. Gastos Administrativos Globales
+    if (resultados.Gastos_Administrativos > 0) {
+      rows.push([
+        "Gastos Administrativos Corporativos", 
+        1, 
+        0, 
+        0, "0%", 0, "0%", 
+        "Global", 
+        "0%", 
+        Math.round(resultados.Gastos_Administrativos), 
+        0, 
+        Math.round(resultados.Gastos_Administrativos), 
+        Math.round(resultados.Gastos_Administrativos)
+      ]);
+      sumTotal += resultados.Gastos_Administrativos;
+    }
+
     // Subtotal y Finales
-    rows.push(["", "", "", "", "", "", "", "", ""]); // Fila vacía
-    rows.push(["", "", "", "", "", "", "", "SUBTOTAL", Math.round(sumTotal)]);
-    rows.push(["", "", "", "", "", "", "", "IVA (10%)", Math.round(sumTotal * 0.1)]);
-    rows.push(["", "", "", "", "", "", "", "GRAN TOTAL", Math.round(sumTotal * 1.1)]);
+    rows.push(["", "", "", "", "", "", "", "", "", "", "", "", ""]); // Fila vacía
+    rows.push(["", "", "", "", "", "", "", "", "", "", "", "SUBTOTAL", Math.round(sumTotal)]);
+    rows.push(["", "", "", "", "", "", "", "", "", "", "", "IVA (10%)", Math.round(sumTotal * 0.1)]);
+    rows.push(["", "", "", "", "", "", "", "", "", "", "", "GRAN TOTAL", Math.round(sumTotal * 1.1)]);
 
     // 4. Export
     const worksheet = XLSX.utils.aoa_to_sheet(rows);
@@ -151,6 +187,8 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
     (resultados.Ganancia_Imprevistos || 0) + 
     (resultados.Ganancia_Tercerizados_Nuevos || 0) + 
     (resultados.Ganancia_Alquileres || 0) + 
+    (resultados.Ganancia_ServiceFee_Total || 0) + 
+    (resultados.Ganancia_Amortizacion_Total || 0) + 
     (resultados.Utilidad_Oculta_TopDown || 0);
 
   const margenRealUI = resultados.Precio_Venta_Final > 0 
@@ -289,11 +327,11 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
               </div>
             )}
 
-            {resultados.Precio_Mercado_Aplicado > 0 && (
+            {resultados.Precio_Mercado_Total_Trafos > 0 && (
               <div style={{ background: '#ecfdf5', color: '#059669', padding: '10px', borderRadius: '4px', marginBottom: '10px', border: '1px solid #10b981' }}>
-                <strong>Estrategia Top-Down Activa:</strong> El precio fue fijado por valor de mercado.
+                <strong>Estrategia Top-Down Activa:</strong> Precios fijados por valor de mercado.
                 <div style={{ marginTop: '5px', color: '#064e3b', fontSize: '0.9rem' }}>
-                  Valor Inyectado: <strong>{formatGs(cotizacion.Precio_Mercado_Aplicado)}</strong> (x {resultados.Cantidad_Trafos} unidades = {formatGs(resultados.Precio_Mercado_Total_Trafos)})
+                  Total {resultados.Cantidad_Trafos} unidades impactadas (Valor Acumulado: {formatGs(resultados.Precio_Mercado_Total_Trafos)})
                 </div>
               </div>
             )}

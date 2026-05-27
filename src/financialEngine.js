@@ -45,6 +45,11 @@ export const calcularCotizacionActiva = (cotizacion) => {
   let Costo_Subcontratistas_Total = 0;
   let Ganancia_Tercerizados_Nuevos = 0;
   
+  let Costo_ServiceFee_Total = 0;
+  let Ganancia_ServiceFee_Total = 0;
+  let Costo_Amortizacion_Total = 0;
+  let Ganancia_Amortizacion_Total = 0;
+  
   // Acumulador de Esfuerzo Logístico
   let Total_Dias_Esfuerzo = 0;
   let Cantidad_Trafos = 0;
@@ -56,6 +61,7 @@ export const calcularCotizacionActiva = (cotizacion) => {
 
   equiposCotizados.forEach(item => {
     const isTercerizado = item.overrides?.is_tercerizado || false;
+    const isTopDown = item.overrides?.top_down_enabled !== false;
     const qty = item.cantidad || 1;
     let Precio_Unitario_Final = 0;
     let costo_directo_unitario = 0;
@@ -68,77 +74,89 @@ export const calcularCotizacionActiva = (cotizacion) => {
     const esInstrumentoOParche = textoBusqueda.includes('potencial') || textoBusqueda.includes('corriente') || textoBusqueda.includes('medida') || textoBusqueda.includes('tensión') || textoBusqueda.includes('tension') || textoBusqueda.includes('servicios') || textoBusqueda.includes('reactor') || textoBusqueda.includes('batería') || textoBusqueda.includes('bateria');
     const esRealmenteTrafo = (textoBusqueda.includes('transformador') || textoBusqueda.includes('autotransformador')) && !esInstrumentoOParche;
     
-    if (esRealmenteTrafo && Precio_Mercado_Aplicado > 0) {
-        estrategia = 'Top-Down';
-        // Excepción Top-Down: El precio financiero es un Flat Rate inyectado unitario
-        const valor_inyectado_unitario = Precio_Mercado_Aplicado;
-        Precio_Unitario_Final = valor_inyectado_unitario; // Blindado sin márgenes extra
-        
-        Precio_Mercado_Total_Trafos += Precio_Unitario_Final * qty;
-        Cantidad_Trafos += qty;
-        
-        // Esfuerzo logístico global:
-        const horas_equipo = item.overrides?.horas_equipo ?? item.baseData?.horas_equipo ?? 0;
-        const especialistas_internos = item.overrides?.interno ?? item.baseData?.interno ?? 1;
-        const auxiliares = item.overrides?.ayudante ?? item.baseData?.ayudante ?? 1;
-        const externos = item.overrides?.externo ?? item.baseData?.externo ?? 0;
-        Total_Dias_Esfuerzo += ((horas_equipo / 8) * (especialistas_internos + auxiliares + externos)) * qty;
-        
-        // Utilidad oculta (solo para métricas globales, no altera el precio)
-        const Costo_Tecnologia = horas_equipo * TARIFA_EQUIPOS_HORA;
-        const Costo_MO_Esp = (horas_equipo / 8) * especialistas_internos * COSTO_ESPECIALISTA_DIA;
-        const Costo_MO_Aux = (horas_equipo / 8) * auxiliares * COSTO_AUXILIAR_DIA;
-        const Costo_MO_Ext = (horas_equipo / 8) * externos * COSTO_EXTERNO_DIA;
-        const costoDirectoTeorico = Costo_Tecnologia + Costo_MO_Esp + Costo_MO_Aux + Costo_MO_Ext;
-        
-        costo_directo_unitario = costoDirectoTeorico;
-        admin_unitario = 0; // Se asume 0 para que Cuadre con valor_inyectado_unitario
-        utilidad_neta_unitaria = valor_inyectado_unitario - costoDirectoTeorico;
-        
-        Utilidad_Oculta_TopDown += utilidad_neta_unitaria * qty;
-        
-    } else if (isTercerizado) {
+    // Variables Base (Nuevas)
+    const costoFee = item.overrides?.costoServiceFee ?? 0;
+    const margenFeePerc = item.overrides?.margenServiceFee ?? 0;
+    const costoAmort = item.overrides?.costoAmortizacion ?? 0;
+    const margenAmortPerc = item.overrides?.margenAmortizacion ?? 0;
+    
+    const precioFee = costoFee * (margenFeePerc / 100);
+    const precioAmort = costoAmort * (margenAmortPerc / 100);
+
+    // Sumamos a globales adicionales
+    Costo_ServiceFee_Total += costoFee * qty;
+    Ganancia_ServiceFee_Total += precioFee * qty;
+    Costo_Amortizacion_Total += costoAmort * qty;
+    Ganancia_Amortizacion_Total += precioAmort * qty;
+    
+    // Variables de Costo Operativo
+    const horas_equipo = item.overrides?.horas_equipo ?? item.baseData?.horas_equipo ?? 0;
+    const especialistas_internos = item.overrides?.interno ?? item.baseData?.interno ?? 1;
+    const auxiliares = item.overrides?.ayudante ?? item.baseData?.ayudante ?? 1;
+    const externos = item.overrides?.externo ?? item.baseData?.externo ?? 0;
+
+    const Costo_Tecnologia = horas_equipo * TARIFA_EQUIPOS_HORA;
+    const Costo_MO_Esp = (horas_equipo / 8) * especialistas_internos * COSTO_ESPECIALISTA_DIA;
+    const Costo_MO_Aux = (horas_equipo / 8) * auxiliares * COSTO_AUXILIAR_DIA;
+    const Costo_MO_Ext = (horas_equipo / 8) * externos * COSTO_EXTERNO_DIA;
+    
+    const Utilidad_Tecnologia = Costo_Tecnologia * Variables_Globales.MARGEN_TECNOLOGIA;
+    const Utilidad_MO_Propia = (Costo_MO_Esp + Costo_MO_Aux) * (Variables_Globales.Margen_Ganancia_MO_Propia / 100);
+    const Utilidad_MO_Externa = Costo_MO_Ext * 0.30;
+    
+    if (isTercerizado) {
       estrategia = 'Subcontrato';
-      // 3. Excepción Estricta para Ítems Tercerizados
-      const costoFlat = item.overrides?.costo_total_base ?? item.baseData?.costo_total_base ?? 0;
+      // Estrategia A: TERCERIZADO
+      const costoSubcontratista = item.overrides?.costo_total_base ?? item.baseData?.costo_total_base ?? 0;
       const margenPerc = item.overrides?.margen_tercerizado ?? 30;
+      const margenSubcontratista = costoSubcontratista * (margenPerc / 100);
       
-      const ganancia = costoFlat * (margenPerc / 100);
-      const adminProp = costoFlat * (Variables_Globales.Gastos_Administrativos_Porcentaje / 100);
-      Precio_Unitario_Final = costoFlat + ganancia + adminProp;
+      const Costo_Directo_Base = costoSubcontratista;
+      const Costo_Directo_Total_Item = Costo_Directo_Base + costoFee + costoAmort;
+      const Precio_Venta_Base = Costo_Directo_Base + margenSubcontratista;
+      const Precio_Venta_Total_Item = Precio_Venta_Base + precioFee + precioAmort;
       
-      costo_directo_unitario = costoFlat;
-      admin_unitario = adminProp;
-      utilidad_neta_unitaria = ganancia;
+      costo_directo_unitario = Costo_Directo_Total_Item;
+      Precio_Unitario_Final = Precio_Venta_Total_Item;
+      utilidad_neta_unitaria = Precio_Unitario_Final - costo_directo_unitario;
       
-      Costo_Subcontratistas_Total += costoFlat * qty;
-      Ganancia_Tercerizados_Nuevos += ganancia * qty;
+      Costo_Subcontratistas_Total += Costo_Directo_Base * qty;
+      Ganancia_Tercerizados_Nuevos += margenSubcontratista * qty;
+      
+    } else if (isTopDown && (item.overrides?.valor_inyectado > 0 || Precio_Mercado_Aplicado > 0)) {
+      estrategia = 'Top-Down';
+      // Estrategia B: TOP-DOWN
+      const Costo_Directo_Base = Costo_Tecnologia + Costo_MO_Esp + Costo_MO_Aux + Costo_MO_Ext;
+      const Costo_Directo_Total_Item = Costo_Directo_Base + costoFee + costoAmort;
+      
+      const precioTopDown = item.overrides?.valor_inyectado > 0 ? item.overrides.valor_inyectado : Precio_Mercado_Aplicado;
+      const Precio_Venta_Total_Item = precioTopDown;
+      
+      costo_directo_unitario = Costo_Directo_Total_Item;
+      Precio_Unitario_Final = Precio_Venta_Total_Item;
+      utilidad_neta_unitaria = Precio_Unitario_Final - costo_directo_unitario;
+      
+      Precio_Mercado_Total_Trafos += precioTopDown * qty;
+      Cantidad_Trafos += qty;
+      Utilidad_Oculta_TopDown += utilidad_neta_unitaria * qty;
+      
+      // Esfuerzo logístico
+      Total_Dias_Esfuerzo += ((horas_equipo / 8) * (especialistas_internos + auxiliares + externos)) * qty;
+      
     } else {
       estrategia = 'Normal';
-      // 2. Costo Técnico por Ítem (Bottom-Up Puro)
-      const horas_equipo = item.overrides?.horas_equipo ?? item.baseData?.horas_equipo ?? 0;
-      const especialistas_internos = item.overrides?.interno ?? item.baseData?.interno ?? 1;
-      const auxiliares = item.overrides?.ayudante ?? item.baseData?.ayudante ?? 1;
-      const externos = item.overrides?.externo ?? item.baseData?.externo ?? 0;
+      // Estrategia C: ESTÁNDAR / BOTTOM-UP
+      const Costo_Directo_Base = Costo_Tecnologia + Costo_MO_Esp + Costo_MO_Aux + Costo_MO_Ext;
+      const Costo_Directo_Total_Item = Costo_Directo_Base + costoFee + costoAmort;
       
-      const Costo_Tecnologia = horas_equipo * TARIFA_EQUIPOS_HORA;
-      const Costo_MO_Esp = (horas_equipo / 8) * especialistas_internos * COSTO_ESPECIALISTA_DIA;
-      const Costo_MO_Aux = (horas_equipo / 8) * auxiliares * COSTO_AUXILIAR_DIA;
-      const Costo_MO_Ext = (horas_equipo / 8) * externos * COSTO_EXTERNO_DIA;
+      const margenBottomUp = Utilidad_Tecnologia + Utilidad_MO_Propia + Utilidad_MO_Externa;
+      const Precio_Venta_Base = Costo_Directo_Base + margenBottomUp;
+      const Precio_Venta_Total_Item = Precio_Venta_Base + precioFee + precioAmort;
       
-      const Costo_Directo_Item = Costo_Tecnologia + Costo_MO_Esp + Costo_MO_Aux + Costo_MO_Ext;
+      costo_directo_unitario = Costo_Directo_Total_Item;
+      Precio_Unitario_Final = Precio_Venta_Total_Item;
+      utilidad_neta_unitaria = Precio_Unitario_Final - costo_directo_unitario;
       
-      const Utilidad_Tecnologia = Costo_Tecnologia * Variables_Globales.MARGEN_TECNOLOGIA;
-      const Utilidad_MO_Propia = (Costo_MO_Esp + Costo_MO_Aux) * (Variables_Globales.Margen_Ganancia_MO_Propia / 100);
-      const Utilidad_MO_Externa = Costo_MO_Ext * 0.30; // 30% markup sobre externos
-      const Admin_Proporcional = Costo_Directo_Item * (Variables_Globales.Gastos_Administrativos_Porcentaje / 100);
-      
-      costo_directo_unitario = Costo_Directo_Item;
-      admin_unitario = Admin_Proporcional;
-      utilidad_neta_unitaria = Utilidad_Tecnologia + Utilidad_MO_Propia + Utilidad_MO_Externa;
-      Precio_Unitario_Final = Costo_Directo_Item + Utilidad_Tecnologia + Utilidad_MO_Propia + Utilidad_MO_Externa + Admin_Proporcional;
-      
-      // Sumar a globales
       Costo_Tecnologia_Total += Costo_Tecnologia * qty;
       Costo_MO_Especialistas_Total += Costo_MO_Esp * qty;
       Costo_MO_Auxiliares_Total += Costo_MO_Aux * qty;
@@ -150,13 +168,20 @@ export const calcularCotizacionActiva = (cotizacion) => {
       if (esRealmenteTrafo) Cantidad_Trafos += qty;
     }
     
+    admin_unitario = 0; // Administrados como subtotales globales aparte
+    
     equiposProcesados.push({
       ...item,
       estrategia,
       costo_directo_unitario,
+      costoServiceFee: costoFee,
+      margenServiceFee: margenFeePerc,
+      costoAmortizacion: costoAmort,
+      margenAmortizacion: margenAmortPerc,
       admin_unitario,
       utilidad_neta_unitaria,
-      precio_unitario_final: Precio_Unitario_Final
+      precio_unitario_final: Precio_Unitario_Final,
+      precio_total_final: Precio_Unitario_Final * qty // Útil para la UI
     });
   });
 
@@ -215,7 +240,7 @@ export const calcularCotizacionActiva = (cotizacion) => {
   const Total_Alquileres = alquileres.reduce((sum, alq) => sum + (Number(alq.costo) || 0), 0);
 
   // Subtotales de Costo Directo
-  const Costo_Directo_Total = Costo_Tecnologia_Total + Costo_Mano_Obra_Total + Logistica_Global_Total + Total_Alquileres + Costo_Subcontratistas_Total + Gastos_Imprevistos;
+  const Costo_Directo_Total = Costo_Tecnologia_Total + Costo_Mano_Obra_Total + Logistica_Global_Total + Total_Alquileres + Costo_Subcontratistas_Total + Gastos_Imprevistos + Costo_ServiceFee_Total + Costo_Amortizacion_Total;
 
   // 6. Márgenes Comerciales Diferenciados
   const Ganancia_Ingenieria = (Costo_MO_Especialistas_Total + Costo_MO_Auxiliares_Total) * (Variables_Globales.Margen_Ganancia_MO_Propia / 100) + Ganancia_MO_Externa_Total;
@@ -224,32 +249,32 @@ export const calcularCotizacionActiva = (cotizacion) => {
   const Ganancia_Alquileres = Total_Alquileres * 0.30;
   const Gastos_Administrativos = Costo_Directo_Total * (Variables_Globales.Gastos_Administrativos_Porcentaje / 100);
   
-  // Precio Logística Pura Exportable (Logística + 30% + Admin)
-  const Precio_Venta_Logistica = Logistica_Global_Total + Ganancia_Logistica + (Logistica_Global_Total * (Variables_Globales.Gastos_Administrativos_Porcentaje / 100));
+  // Precio Logística Pura Exportable (Logística + 30%)
+  const Precio_Venta_Logistica = Logistica_Global_Total + Ganancia_Logistica;
 
   // Alquileres Procesados
   const alquileresProcesados = alquileres.map(alq => {
       const costo = Number(alq.costo) || 0;
-      const adminProp = costo * (Variables_Globales.Gastos_Administrativos_Porcentaje / 100);
+      const adminProp = 0; // Removido por regla de subtotal global
       const utilidadAlquiler = costo * 0.30;
       return { 
         ...alq, 
         estrategia: 'Alquiler Especial',
         costo_directo_unitario: costo,
-        admin_unitario: adminProp,
+        admin_unitario: adminProp, // Mantener en 0
         utilidad_neta_unitaria: utilidadAlquiler,
-        precio_unitario_final: costo + adminProp + utilidadAlquiler 
+        precio_unitario_final: costo + utilidadAlquiler 
       };
   });
 
   // PRECIO FINAL SUMATORIO
-  const Precio_Venta_BottomUp = Costo_Directo_Total + Gastos_Administrativos + Ganancia_Ingenieria + Ganancia_Tecnologia_Total + Ganancia_Logistica + Ganancia_Imprevistos + Ganancia_Tercerizados_Nuevos + Ganancia_Alquileres;
+  const Precio_Venta_BottomUp = Costo_Directo_Total + Gastos_Administrativos + Ganancia_Ingenieria + Ganancia_Tecnologia_Total + Ganancia_Logistica + Ganancia_Imprevistos + Ganancia_Tercerizados_Nuevos + Ganancia_Alquileres + Ganancia_ServiceFee_Total + Ganancia_Amortizacion_Total;
   
   // Agregar directamente el valor inyectado Top-Down
   let Precio_Venta_Final = Precio_Venta_BottomUp + Precio_Mercado_Total_Trafos;
   
   // La ganancia neta ahora suma estrictamente las utilidades puras
-  const Ganancia_Neta_Esperada = Ganancia_Ingenieria + Ganancia_Tecnologia_Total + Ganancia_Logistica + Ganancia_Imprevistos + Ganancia_Tercerizados_Nuevos + Ganancia_Alquileres + Utilidad_Oculta_TopDown;
+  const Ganancia_Neta_Esperada = Ganancia_Ingenieria + Ganancia_Tecnologia_Total + Ganancia_Logistica + Ganancia_Imprevistos + Ganancia_Tercerizados_Nuevos + Ganancia_Alquileres + Ganancia_ServiceFee_Total + Ganancia_Amortizacion_Total + Utilidad_Oculta_TopDown;
   const Margen_Real_Porcentaje = Precio_Venta_Final > 0 ? (Ganancia_Neta_Esperada / Precio_Venta_Final) * 100 : 0;
 
   return {
@@ -280,6 +305,8 @@ export const calcularCotizacionActiva = (cotizacion) => {
     Ganancia_Imprevistos,
     Ganancia_Alquileres,
     Ganancia_Tercerizados_Nuevos,
+    Ganancia_ServiceFee_Total,
+    Ganancia_Amortizacion_Total,
     Gastos_Administrativos,
     Ganancia_Neta_Esperada,
     Precio_Venta_Final,
