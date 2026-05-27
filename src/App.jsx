@@ -85,8 +85,34 @@ function App() {
   const [showAdHocModal, setShowAdHocModal] = useState(false);
   const [adHocState, setAdHocState] = useState({
     equipo: '', tension: '500 kV', horas_equipo: 4, interno: 1, ayudante: 1, externo: 0,
-    costo_total_base: 0, is_tercerizado: false, margen_tercerizado: 30, saveToDb: false
+    costo_total_base: 0, is_tercerizado: false, margen_tercerizado: 30, saveToDb: false,
+    categoria: 'zona_otros'
   });
+
+  // Unsaved changes & Reset
+  const [isDirty, setIsDirty] = useState(false);
+  const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
+
+  const resetQuote = () => {
+    setCart([]);
+    setAlquileres([]);
+    setDistanciaKm(100);
+    setDiasPermitidosCorte(3);
+    setGastosImprevistos(0);
+    setMargenImprevistosPorcentaje(0);
+    setLogisticsOverrides({ enabled: false });
+    setCliente('');
+    setNombreObra('');
+    setIsDirty(false);
+  };
+
+  const handleNewCosteo = () => {
+    if (isDirty) {
+      setShowUnsavedChangesModal(true);
+    } else {
+      resetQuote();
+    }
+  };
 
   // Set default equipment when tension changes
   React.useEffect(() => {
@@ -158,17 +184,20 @@ function App() {
       cantidad: item.cantidad,
       baseData: equipData
     }]);
+    setIsDirty(true);
     alert(`✅ ${item.cantidad}x ${item.equipo} (${item.tension}) agregado al carrito.`);
   };
 
   const removeItem = (id) => {
     setCart(prev => prev.filter(item => item.id !== id));
+    setIsDirty(true);
   };
 
   const updateQuantity = (id, newQty) => {
     const parsedQty = parseInt(newQty);
     if (isNaN(parsedQty) || parsedQty < 1) return;
     setCart(prev => prev.map(item => item.id === id ? { ...item, cantidad: parsedQty } : item));
+    setIsDirty(true);
   };
 
   const openEditModal = (item) => {
@@ -196,6 +225,7 @@ function App() {
         ? { ...item, overrides: { ...overrideState } } 
         : item
     ));
+    setIsDirty(true);
     closeEditModal();
   };
 
@@ -203,9 +233,14 @@ function App() {
     if (!adHocState.equipo) return alert("Ingresa un nombre para el equipo.");
     
     const baseData = {
-      equipo: adHocState.equipo, tension: adHocState.tension, horas_equipo: adHocState.horas_equipo,
-      interno: adHocState.interno, ayudante: adHocState.ayudante, externo: adHocState.externo,
-      costo_total_base: adHocState.costo_total_base
+      equipo: adHocState.equipo, 
+      tension: adHocState.tension, 
+      horas_equipo: adHocState.horas_equipo,
+      interno: adHocState.interno, 
+      ayudante: adHocState.ayudante, 
+      externo: adHocState.externo,
+      costo_total_base: adHocState.costo_total_base,
+      categoria: adHocState.categoria || 'zona_otros'
     };
 
     if (adHocState.saveToDb) {
@@ -226,19 +261,23 @@ function App() {
       }
     }]);
 
+    setIsDirty(true);
     setShowAdHocModal(false);
   };
 
   const addAlquiler = () => {
     setAlquileres([...alquileres, { id: Date.now(), descripcion: '', costo: 0 }]);
+    setIsDirty(true);
   };
 
   const updateAlquiler = (id, field, value) => {
     setAlquileres(alquileres.map(a => a.id === id ? { ...a, [field]: value } : a));
+    setIsDirty(true);
   };
 
   const removeAlquiler = (id) => {
     setAlquileres(alquileres.filter(a => a.id !== id));
+    setIsDirty(true);
   };
 
   // Calculations
@@ -303,6 +342,7 @@ function App() {
     
     setCliente(quote.Cliente || '');
     setNombreObra(quote.NombreObra || '');
+    setIsDirty(false);
   };
 
   const formatGs = (num) => {
@@ -350,6 +390,7 @@ function App() {
         Margen_Imprevistos_Porcentaje: margenImprevistosPorcentaje,
         Precio_Venta_Final: resultadosCalculados.Precio_Venta_Final
       });
+      setIsDirty(false);
       alert("✅ Cotización guardada exitosamente en la base de datos.");
     } catch (e) {
       alert("Hubo un error al guardar la cotización.");
@@ -595,6 +636,24 @@ function App() {
               Guardar en base de datos general (equipos_maestros)
             </label>
 
+            {adHocState.saveToDb && (
+              <div className="form-group" style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '5px' }}>Categoría en Base de Datos</label>
+                <select 
+                  value={adHocState.categoria} 
+                  onChange={e => setAdHocState({...adHocState, categoria: e.target.value})}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--border-color)', background: '#ffffff', color: 'var(--text-primary)' }}
+                >
+                  <option value="zona1_maniobra">Equipos de Maniobra (Patio AT)</option>
+                  <option value="zona1_medicion">Equipos de Medición y Protección (Patio AT)</option>
+                  <option value="zona2">Transformación de Potencia</option>
+                  <option value="zona3">Distribución en Media Tensión</option>
+                  <option value="zona_globales">Sistemas Globales (Sala de Control)</option>
+                  <option value="zona_otros">Otros Servicios</option>
+                </select>
+              </div>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button className="remove-btn" onClick={() => setShowAdHocModal(false)}>Cancelar</button>
               <button className="primary-btn" style={{ background: '#10b981' }} onClick={handleSaveAdHoc}>Agregar al Carrito</button>
@@ -609,6 +668,13 @@ function App() {
           <h1>Cotizador de Servicios Especializados</h1>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            className="primary-btn"
+            onClick={handleNewCosteo}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#e2e8f0', color: '#1e293b' }}
+          >
+            <Plus size={18} /> Nuevo Costeo
+          </button>
           <button 
             className="primary-btn"
             onClick={() => setShowSavedQuotesPanel(true)}
@@ -642,11 +708,11 @@ function App() {
             <div className="config-grid">
               <div className="form-group">
                 <label>Cliente / Empresa</label>
-                <input type="text" placeholder="Ej: ANDE, Consorcio..." value={cliente} onChange={(e) => setCliente(e.target.value)} />
+                <input type="text" placeholder="Ej: ANDE, Consorcio..." value={cliente} onChange={(e) => { setCliente(e.target.value); setIsDirty(true); }} />
               </div>
               <div className="form-group">
                 <label>Nombre del Proyecto</label>
-                <input type="text" placeholder="Ej: Ampliación SE Limpio" value={nombreObra} onChange={(e) => setNombreObra(e.target.value)} />
+                <input type="text" placeholder="Ej: Ampliación SE Limpio" value={nombreObra} onChange={(e) => { setNombreObra(e.target.value); setIsDirty(true); }} />
               </div>
             </div>
           </div>
@@ -657,7 +723,7 @@ function App() {
               <h2 style={{ margin: 0 }}><Layout size={20} /> Catálogo y Selección</h2>
             </div>
             <div style={{ padding: '20px' }}>
-              <UnifilarConfigurator onAddToCart={handleAddToCartFromUnifilar} />
+              <UnifilarConfigurator onAddToCart={handleAddToCartFromUnifilar} dbEquipments={maestroData} />
             </div>
           </div>
 
@@ -669,11 +735,11 @@ function App() {
             <div className="config-grid" style={{ marginBottom: '20px' }}>
               <div className="form-group">
                 <label>Distancia ida/vuelta (km)</label>
-                <input type="number" min="0" value={distanciaKm} onChange={(e) => setDistanciaKm(parseFloat(e.target.value) || 0)} />
+                <input type="number" min="0" value={distanciaKm} onChange={(e) => { setDistanciaKm(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
               </div>
               <div className="form-group">
                 <label>Días Permitidos (Corte)</label>
-                <input type="number" min="1" value={diasPermitidosCorte} onChange={(e) => setDiasPermitidosCorte(parseInt(e.target.value) || 1)} />
+                <input type="number" min="1" value={diasPermitidosCorte} onChange={(e) => { setDiasPermitidosCorte(parseInt(e.target.value) || 1); setIsDirty(true); }} />
               </div>
             </div>
 
@@ -712,11 +778,11 @@ function App() {
             <div className="config-grid">
               <div className="form-group">
                 <label>Gastos Imprevistos Fijos (Gs.)</label>
-                <input type="number" min="0" value={gastosImprevistos} onChange={(e) => setGastosImprevistos(parseFloat(e.target.value) || 0)} />
+                <input type="number" min="0" value={gastosImprevistos} onChange={(e) => { setGastosImprevistos(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
               </div>
               <div className="form-group">
                 <label>Margen Adicional Imprevistos (%)</label>
-                <input type="number" min="0" value={margenImprevistosPorcentaje} onChange={(e) => setMargenImprevistosPorcentaje(parseFloat(e.target.value) || 0)} />
+                <input type="number" min="0" value={margenImprevistosPorcentaje} onChange={(e) => { setMargenImprevistosPorcentaje(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
               </div>
             </div>
 
@@ -798,7 +864,7 @@ function App() {
         onClose={() => setShowLogisticsModal(false)} 
         resultados={resultadosCalculados}
         currentOverrides={logisticsOverrides}
-        onSave={(newOverrides) => setLogisticsOverrides(newOverrides)}
+        onSave={(newOverrides) => { setLogisticsOverrides(newOverrides); setIsDirty(true); }}
       />
 
       <SavedQuotesPanel 
@@ -806,6 +872,51 @@ function App() {
         onClose={() => setShowSavedQuotesPanel(false)}
         onLoadQuote={handleLoadCotizacion}
       />
+
+      {showUnsavedChangesModal && (
+        <div className="modal-overlay" style={{position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(15, 23, 42, 0.4)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, backdropFilter: 'blur(4px)'}}>
+          <div className="odoo-card modal-content" style={{width:'500px', padding: '30px', textAlign: 'center'}}>
+            <h3 style={{ color: 'var(--accent)', marginBottom: '15px' }}>Cambios sin guardar</h3>
+            <p style={{ color: 'var(--text-primary)', marginBottom: '25px' }}>
+              Tienes cambios sin guardar en la cotización actual. ¿Deseas guardar la cotización actual antes de crear una nueva?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button 
+                className="primary-btn" 
+                onClick={async () => {
+                  if (!cliente || !nombreObra) {
+                    alert("Por favor, ingresa el Cliente y Nombre de la Obra para poder guardar.");
+                    return;
+                  }
+                  await handleSaveCotizacion();
+                  setShowUnsavedChangesModal(false);
+                  resetQuote();
+                }}
+                style={{ background: '#10b981' }}
+              >
+                Guardar y Crear Nueva
+              </button>
+              <button 
+                className="primary-btn" 
+                onClick={() => {
+                  setShowUnsavedChangesModal(false);
+                  resetQuote();
+                }}
+                style={{ background: '#ef4444' }}
+              >
+                Descartar cambios y Crear Nueva
+              </button>
+              <button 
+                className="remove-btn" 
+                onClick={() => setShowUnsavedChangesModal(false)}
+                style={{ background: 'rgba(255,255,255,0.1)', color: 'var(--text-primary)' }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

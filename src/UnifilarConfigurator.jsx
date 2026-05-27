@@ -39,8 +39,60 @@ const equipmentZones = [
   }
 ];
 
-export default function UnifilarConfigurator({ onAddToCart }) {
-  const [openZones, setOpenZones] = useState({ zona1_maniobra: true, zona1_medicion: false, zona2: false, zona3: false, zona_globales: false });
+export default function UnifilarConfigurator({ onAddToCart, dbEquipments = [] }) {
+  const staticZones = [
+    {
+      id: 'zona1_maniobra',
+      title: 'Equipos de Maniobra (Patio AT)',
+      icon: Zap,
+      color: '#f59e0b',
+      items: ['Interruptores de Potencia (SF6)', 'Seccionadores con PAT', 'Seccionadores Simples', 'Seccionadores Pantógrafos (solo 500kV)', 'Seccionadores Monopolares']
+    },
+    {
+      id: 'zona1_medicion',
+      title: 'Equipos de Medición y Protección (Patio AT)',
+      icon: Shield,
+      color: '#ef4444',
+      items: ['Transformadores de Corriente (TC)', 'Transformadores de Potencial (TP/DCP)', 'Descargadores de Sobretensión', 'Trampas de Onda / Bobinas de Bloqueo']
+    },
+    {
+      id: 'zona2',
+      title: 'Transformación de Potencia',
+      icon: Power,
+      color: '#10b981',
+      items: ['Autotransformadores Monofásicos (500kV)', 'Transformadores de Potencia Trifásicos (220kV/66kV)', 'Reactores de Barra/Línea']
+    },
+    {
+      id: 'zona3',
+      title: 'Distribución en Media Tensión (23kV / 6,6kV)',
+      icon: Activity,
+      color: '#8b5cf6',
+      items: ['Celdas GIS / Metal-clad (Llegada, Acople y Salida)', 'Interruptores Extraíbles de Vacío', 'Bancos de Capacitores', 'Transformadores de Servicios Auxiliares de MT']
+    },
+    {
+      id: 'zona_globales',
+      title: 'Sistemas Globales (Sala de Control)',
+      icon: Server,
+      color: '#3b82f6',
+      items: ['Paneles de Protección y Control (Relés/IEDs)', 'Bancos de Baterías y Cargadores Rectificadores', 'Tableros de Servicios Auxiliares (CA/CC)']
+    },
+    {
+      id: 'zona_otros',
+      title: 'Otros Servicios',
+      icon: Server,
+      color: '#64748b',
+      items: []
+    }
+  ];
+
+  const [openZones, setOpenZones] = useState({ 
+    zona1_maniobra: true, 
+    zona1_medicion: false, 
+    zona2: false, 
+    zona3: false, 
+    zona_globales: false,
+    zona_otros: false
+  });
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedEquip, setSelectedEquip] = useState('');
   
@@ -65,6 +117,35 @@ export default function UnifilarConfigurator({ onAddToCart }) {
     setModalOpen(false);
   };
 
+  const standardNames = [
+    "Interruptor", "Seccionador C/PAT", "Seccionador C/PAT Monopolar", "Seccionador", 
+    "Seccionador Pantografo", "Transformador De Corriente", "Transformador De Tensión", 
+    "Descargador", "Trampa de Onda", "Autotransformador Monofásico", "Transformador Trifásico", 
+    "Seccionador Tripolar", "Seccionador Monopolar", "Seccionador Semi-Pantografo Vertical", 
+    "Transformador Monofásico", "Celdas GIS 23kV", "Celda de Llegada", "Celda de Salida", 
+    "Celda de Medición"
+  ].map(n => n.toLowerCase());
+
+  const dynamicZones = staticZones.map(zone => {
+    const dbItemsForZone = dbEquipments.filter(item => {
+      // Ignorar equipos estándar de la base de datos que no tienen categoría explícita
+      const isStandardWithoutCategory = !item.categoria && standardNames.includes(item.equipo.toLowerCase());
+      if (isStandardWithoutCategory) return false;
+
+      const itemCat = item.categoria || 'zona_otros';
+      if (zone.id === 'zona_otros') {
+        return itemCat === 'zona_otros' || !staticZones.some(sz => sz.id === itemCat);
+      }
+      return itemCat === zone.id;
+    });
+    const dbNames = [...new Set(dbItemsForZone.map(item => item.equipo))];
+    const mergedItems = [...new Set([...zone.items, ...dbNames])];
+    return {
+      ...zone,
+      items: mergedItems
+    };
+  });
+
   return (
     <div className="unifilar-container" style={{ display: 'flex', gap: '20px' }}>
       {/* LEFT PANEL - ACCORDIONS */}
@@ -76,7 +157,7 @@ export default function UnifilarConfigurator({ onAddToCart }) {
           Selecciona los equipos de cada zona para añadirlos a tu carrito técnico.
         </p>
 
-        {equipmentZones.map((zone) => {
+        {dynamicZones.map((zone) => {
           const Icon = zone.icon;
           const isOpen = openZones[zone.id];
 
@@ -85,7 +166,7 @@ export default function UnifilarConfigurator({ onAddToCart }) {
               {/* Accordion Header */}
               <div 
                 onClick={() => toggleZone(zone.id)}
-                style={{ padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: isOpen ? `rgba(${zone.color === '#f59e0b' ? '245,158,11' : zone.color === '#10b981' ? '16,185,129' : '139,92,246'}, 0.1)` : 'transparent' }}
+                style={{ padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: isOpen ? `rgba(${zone.color === '#f59e0b' ? '245,158,11' : zone.color === '#10b981' ? '16,185,129' : zone.color === '#139,92,246' ? '139,92,246' : '100,116,139'}, 0.1)` : 'transparent' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <Icon size={20} color={zone.color} />
