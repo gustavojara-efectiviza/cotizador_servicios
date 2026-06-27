@@ -60,8 +60,9 @@ export const calcularCotizacionActiva = (cotizacion) => {
   const equiposProcesados = [];
 
   equiposCotizados.forEach(item => {
-    const isTercerizado = item.overrides?.is_tercerizado || false;
-    const isTopDown = item.overrides?.top_down_enabled !== false;
+    const isTercerizado = item.overrides?.is_tercerizado === true;
+    const isTopDown = item.overrides?.top_down_enabled === true; 
+    
     const qty = item.cantidad || 1;
     let Precio_Unitario_Final = 0;
     let costo_directo_unitario = 0;
@@ -69,12 +70,12 @@ export const calcularCotizacionActiva = (cotizacion) => {
     let utilidad_neta_unitaria = 0;
     let estrategia = 'Normal';
     
-    // Identificar si es transformador (para Top-Down exception)
+    // Identificar si es transformador (para lógica de UI o agrupación)
     const textoBusqueda = `${item.baseData?.equipo || ''} ${item.equipo || ''}`.toLowerCase();
     const esInstrumentoOParche = textoBusqueda.includes('potencial') || textoBusqueda.includes('corriente') || textoBusqueda.includes('medida') || textoBusqueda.includes('tensión') || textoBusqueda.includes('tension') || textoBusqueda.includes('servicios') || textoBusqueda.includes('reactor') || textoBusqueda.includes('batería') || textoBusqueda.includes('bateria');
     const esRealmenteTrafo = (textoBusqueda.includes('transformador') || textoBusqueda.includes('autotransformador')) && !esInstrumentoOParche;
     
-    // Variables Base (Nuevas)
+    // Variables Base
     const costoFee = item.overrides?.costoServiceFee ?? 0;
     const margenFeePerc = item.overrides?.margenServiceFee ?? 0;
     const costoAmort = item.overrides?.costoAmortizacion ?? 0;
@@ -104,9 +105,10 @@ export const calcularCotizacionActiva = (cotizacion) => {
     const Utilidad_MO_Propia = (Costo_MO_Esp + Costo_MO_Aux) * (Variables_Globales.Margen_Ganancia_MO_Propia / 100);
     const Utilidad_MO_Externa = Costo_MO_Ext * 0.30;
     
+    const valorInyectadoItem = Number(item.overrides?.valor_inyectado) || 0;
+
     if (isTercerizado) {
       estrategia = 'Subcontrato';
-      // Estrategia A: TERCERIZADO
       const costoSubcontratista = item.overrides?.costo_total_base ?? item.baseData?.costo_total_base ?? 0;
       const margenPerc = item.overrides?.margen_tercerizado ?? 30;
       const margenSubcontratista = costoSubcontratista * (margenPerc / 100);
@@ -123,29 +125,26 @@ export const calcularCotizacionActiva = (cotizacion) => {
       Costo_Subcontratistas_Total += Costo_Directo_Base * qty;
       Ganancia_Tercerizados_Nuevos += margenSubcontratista * qty;
       
-    } else if (isTopDown && (item.overrides?.valor_inyectado > 0 || Precio_Mercado_Aplicado > 0)) {
+    } else if (isTopDown && valorInyectadoItem > 0) {
       estrategia = 'Top-Down';
-      // Estrategia B: TOP-DOWN
+      
       const Costo_Directo_Base = Costo_Tecnologia + Costo_MO_Esp + Costo_MO_Aux + Costo_MO_Ext;
       const Costo_Directo_Total_Item = Costo_Directo_Base + costoFee + costoAmort;
       
-      const precioTopDown = item.overrides?.valor_inyectado > 0 ? item.overrides.valor_inyectado : Precio_Mercado_Aplicado;
-      const Precio_Venta_Total_Item = precioTopDown;
+      const Precio_Venta_Total_Item = valorInyectadoItem;
       
       costo_directo_unitario = Costo_Directo_Total_Item;
       Precio_Unitario_Final = Precio_Venta_Total_Item;
       utilidad_neta_unitaria = Precio_Unitario_Final - costo_directo_unitario;
       
-      Precio_Mercado_Total_Trafos += precioTopDown * qty;
-      Cantidad_Trafos += qty;
+      Precio_Mercado_Total_Trafos += Precio_Venta_Total_Item * qty;
+      if (esRealmenteTrafo) Cantidad_Trafos += qty;
       Utilidad_Oculta_TopDown += utilidad_neta_unitaria * qty;
       
-      // Esfuerzo logístico
       Total_Dias_Esfuerzo += ((horas_equipo / 8) * (especialistas_internos + auxiliares + externos)) * qty;
       
     } else {
       estrategia = 'Normal';
-      // Estrategia C: ESTÁNDAR / BOTTOM-UP
       const Costo_Directo_Base = Costo_Tecnologia + Costo_MO_Esp + Costo_MO_Aux + Costo_MO_Ext;
       const Costo_Directo_Total_Item = Costo_Directo_Base + costoFee + costoAmort;
       
@@ -168,7 +167,7 @@ export const calcularCotizacionActiva = (cotizacion) => {
       if (esRealmenteTrafo) Cantidad_Trafos += qty;
     }
     
-    admin_unitario = 0; // Administrados como subtotales globales aparte
+    admin_unitario = 0;
     
     equiposProcesados.push({
       ...item,
@@ -181,7 +180,7 @@ export const calcularCotizacionActiva = (cotizacion) => {
       admin_unitario,
       utilidad_neta_unitaria,
       precio_unitario_final: Precio_Unitario_Final,
-      precio_total_final: Precio_Unitario_Final * qty // Útil para la UI
+      precio_total_final: Precio_Unitario_Final * qty
     });
   });
 
