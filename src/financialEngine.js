@@ -53,6 +53,7 @@ export const calcularCotizacionActiva = (cotizacion) => {
   // Acumulador de Esfuerzo Logístico
   let Total_Dias_Esfuerzo = 0;
   let Cantidad_Trafos = 0;
+  let Cantidad_Equipos_TopDown = 0;
   let Precio_Mercado_Total_Trafos = 0;
 
   let Utilidad_Oculta_TopDown = 0;
@@ -138,6 +139,7 @@ export const calcularCotizacionActiva = (cotizacion) => {
       utilidad_neta_unitaria = Precio_Unitario_Final - costo_directo_unitario;
       
       Precio_Mercado_Total_Trafos += Precio_Venta_Total_Item * qty;
+      Cantidad_Equipos_TopDown += qty;
       if (esRealmenteTrafo) Cantidad_Trafos += qty;
       Utilidad_Oculta_TopDown += utilidad_neta_unitaria * qty;
       
@@ -311,6 +313,7 @@ export const calcularCotizacionActiva = (cotizacion) => {
     Precio_Venta_Final,
     Margen_Real_Porcentaje,
     Cantidad_Trafos,
+    Cantidad_Equipos_TopDown,
     Precio_Mercado_Aplicado,
     Precio_Mercado_Total_Trafos,
     Ganancia_Tecnologia_Total,

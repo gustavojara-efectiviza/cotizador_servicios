@@ -248,7 +248,7 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
 
   const generateERPMemory = () => {
     const logisticaText = cotizacion.logisticsOverrides?.enabled ? 'Sobrescritura Manual Activa' : 'Cálculo Automático';
-    const topDownText = resultados.Utilidad_Oculta_TopDown > 0 ? `Activo en ${resultados.Cantidad_Trafos || 1} equipos` : 'No utilizado';
+    const topDownText = resultados.Utilidad_Oculta_TopDown > 0 ? `Activo en ${resultados.Cantidad_Equipos_TopDown || 1} equipos` : 'No utilizado';
 
     return `MEMORIA DE CÁLCULO - ZUNZ COTIZADOR
 -----------------------------------------
@@ -363,7 +363,7 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
               <div style={{ background: '#ecfdf5', color: '#059669', padding: '10px', borderRadius: '4px', marginBottom: '10px', border: '1px solid #10b981' }}>
                 <strong>Estrategia Top-Down Activa:</strong> Precios fijados por valor de mercado.
                 <div style={{ marginTop: '5px', color: '#064e3b', fontSize: '0.9rem' }}>
-                  Total {resultados.Cantidad_Trafos} unidades impactadas (Valor Acumulado: {formatGs(resultados.Precio_Mercado_Total_Trafos)})
+                  Total {resultados.Cantidad_Equipos_TopDown} unidades impactadas (Valor Acumulado: {formatGs(resultados.Precio_Mercado_Total_Trafos)})
                 </div>
               </div>
             )}
@@ -435,7 +435,7 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
               <div style={{ marginBottom: '5px' }}>
                 <strong style={{ color: 'var(--accent)', display: 'block', marginBottom: '5px' }}>[ESTRATEGIA COMERCIAL Y COBERTURA]</strong>
                 • Fondo de Imprevistos: {formatGs(resultados.Gastos_Imprevistos)}<br/>
-                • Inyección Top-Down: {resultados.Utilidad_Oculta_TopDown > 0 ? `Activo en ${resultados.Cantidad_Trafos || 1} equipos` : 'No utilizado'}<br/>
+                • Inyección Top-Down: {resultados.Utilidad_Oculta_TopDown > 0 ? `Activo en ${resultados.Cantidad_Equipos_TopDown || 1} equipos` : 'No utilizado'}<br/>
                 • Gestión Logística: {cotizacion.logisticsOverrides?.enabled ? 'Sobrescritura Manual Activa' : 'Cálculo Automático'}
               </div>
             </div>
