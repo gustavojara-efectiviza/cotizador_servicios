@@ -130,7 +130,22 @@ function App() {
       tension,
       equipo,
       cantidad: parseInt(cantidad) || 1,
-      baseData: structuredClone(equipData)
+      baseData: structuredClone(equipData),
+      overrides: {
+        horas_equipo: equipData.horas_equipo ?? 4,
+        interno: equipData.interno ?? 1,
+        ayudante: equipData.ayudante ?? 1,
+        externo: equipData.externo ?? 0,
+        costo_total_base: equipData.costo_total_base ?? 0,
+        is_tercerizado: false,
+        margen_tercerizado: 30,
+        top_down_enabled: false,
+        valor_inyectado: 0,
+        costoServiceFee: 0,
+        margenServiceFee: 0,
+        costoAmortizacion: 0,
+        margenAmortizacion: 0
+      }
     }]);
   };
 
@@ -182,7 +197,22 @@ function App() {
       tension: item.tension,
       equipo: item.equipo, // Keep the unifilar name for UI
       cantidad: item.cantidad,
-      baseData: structuredClone(equipData)
+      baseData: structuredClone(equipData),
+      overrides: {
+        horas_equipo: equipData.horas_equipo ?? 4,
+        interno: equipData.interno ?? 1,
+        ayudante: equipData.ayudante ?? 1,
+        externo: equipData.externo ?? 0,
+        costo_total_base: equipData.costo_total_base ?? 0,
+        is_tercerizado: false,
+        margen_tercerizado: 30,
+        top_down_enabled: false,
+        valor_inyectado: 0,
+        costoServiceFee: 0,
+        margenServiceFee: 0,
+        costoAmortizacion: 0,
+        margenAmortizacion: 0
+      }
     }]);
     setIsDirty(true);
     alert(`✅ ${item.cantidad}x ${item.equipo} (${item.tension}) agregado al carrito.`);
@@ -297,10 +327,6 @@ function App() {
   // Calculations
   const totalEsfuerzoHoras = cart.reduce((sum, item) => sum + (item.cantidad * (item.overrides?.horas_equipo ?? item.baseData.horas_equipo ?? 0)), 0);
 
-  // Derivar Top-Down desde el primer ítem que lo tenga activado en el carrito (Para compatibilidad con el engine)
-  const topDownItem = cart.find(item => item.overrides?.top_down_enabled && item.overrides?.valor_inyectado > 0);
-  const derivedPrecioMercado = topDownItem ? topDownItem.overrides.valor_inyectado : 0;
-
   // Generar Cotización Consolidada para el Motor y el Panel Derecho
   const cotizacionGlobal = {
     Cliente: cliente,
@@ -308,7 +334,7 @@ function App() {
     Distancia_Ida_Vuelta_km: distanciaKm,
     Dias_Permitidos_Corte: diasPermitidosCorte,
     Total_Dias_Trabajo: totalEsfuerzoHoras / 8, // Reference for the top level only
-    Precio_Mercado_Aplicado: derivedPrecioMercado,
+    Precio_Mercado_Aplicado: 0,
     Gastos_Imprevistos: gastosImprevistos,
     Margen_Imprevistos_Porcentaje: margenImprevistosPorcentaje,
     logisticsOverrides: logisticsOverrides
