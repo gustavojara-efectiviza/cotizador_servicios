@@ -121,6 +121,24 @@ function App() {
     }
   }, [tension, availableEquipments]);
 
+  const isItemModified = (item) => {
+    if (!item.overrides) return false;
+    if (item.overrides.is_tercerizado || item.overrides.top_down_enabled) return false;
+    const baseHoras = item.baseData?.horas_equipo ?? 4;
+    const baseInterno = item.baseData?.interno ?? 1;
+    const baseAyudante = item.baseData?.ayudante ?? 1;
+    const baseExterno = item.baseData?.externo ?? 0;
+    
+    return (
+      (item.overrides.horas_equipo !== undefined && item.overrides.horas_equipo !== baseHoras) ||
+      (item.overrides.interno !== undefined && item.overrides.interno !== baseInterno) ||
+      (item.overrides.ayudante !== undefined && item.overrides.ayudante !== baseAyudante) ||
+      (item.overrides.externo !== undefined && item.overrides.externo !== baseExterno) ||
+      (item.overrides.costoServiceFee || 0) > 0 ||
+      (item.overrides.costoAmortizacion || 0) > 0
+    );
+  };
+
   const handleAdd = () => {
     const equipData = availableEquipments.find(e => e.equipo === equipo);
     if (!equipData) return;
@@ -130,22 +148,7 @@ function App() {
       tension,
       equipo,
       cantidad: parseInt(cantidad) || 1,
-      baseData: structuredClone(equipData),
-      overrides: {
-        horas_equipo: equipData.horas_equipo ?? 4,
-        interno: equipData.interno ?? 1,
-        ayudante: equipData.ayudante ?? 1,
-        externo: equipData.externo ?? 0,
-        costo_total_base: equipData.costo_total_base ?? 0,
-        is_tercerizado: false,
-        margen_tercerizado: 30,
-        top_down_enabled: false,
-        valor_inyectado: 0,
-        costoServiceFee: 0,
-        margenServiceFee: 0,
-        costoAmortizacion: 0,
-        margenAmortizacion: 0
-      }
+      baseData: structuredClone(equipData)
     }]);
   };
 
@@ -197,22 +200,7 @@ function App() {
       tension: item.tension,
       equipo: item.equipo, // Keep the unifilar name for UI
       cantidad: item.cantidad,
-      baseData: structuredClone(equipData),
-      overrides: {
-        horas_equipo: equipData.horas_equipo ?? 4,
-        interno: equipData.interno ?? 1,
-        ayudante: equipData.ayudante ?? 1,
-        externo: equipData.externo ?? 0,
-        costo_total_base: equipData.costo_total_base ?? 0,
-        is_tercerizado: false,
-        margen_tercerizado: 30,
-        top_down_enabled: false,
-        valor_inyectado: 0,
-        costoServiceFee: 0,
-        margenServiceFee: 0,
-        costoAmortizacion: 0,
-        margenAmortizacion: 0
-      }
+      baseData: structuredClone(equipData)
     }]);
     setIsDirty(true);
     alert(`✅ ${item.cantidad}x ${item.equipo} (${item.tension}) agregado al carrito.`);
@@ -886,7 +874,10 @@ function App() {
                           {item.overrides && item.overrides.is_tercerizado && (
                             <span style={{ fontSize: '0.7rem', background: '#a855f7', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>Tercerizado</span>
                           )}
-                          {item.overrides && !item.overrides.is_tercerizado && (
+                          {item.overrides && item.overrides.top_down_enabled && (
+                            <span style={{ fontSize: '0.7rem', background: '#10b981', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>Top-Down</span>
+                          )}
+                          {isItemModified(item) && (
                             <span style={{ fontSize: '0.7rem', background: '#f59e0b', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>Modificado</span>
                           )}
                         </h4>
