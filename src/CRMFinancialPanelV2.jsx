@@ -3,7 +3,7 @@ import { Variables_Globales } from './financialEngine';
 import { Calculator, FileSpreadsheet, Copy } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotizados = [], alquileres = [] }) {
+export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCotizados = [], alquileres = [] }) {
   const [showAuditoria, setShowAuditoria] = useState(false);
 
   const formatGs = (num) => new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(num);
@@ -12,123 +12,193 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
     const itemsParaExcel = resultados.equiposProcesados || [];
     const alquileresExcel = resultados.alquileresProcesados || [];
     
-    // 3. Build Rows
-    const rows = [];
+    const formatNumber = (num) => Math.round(num || 0);
+    const formatPercent = (num) => `${(num || 0).toFixed(1)}%`;
+
+    // --- HOJA 1: RESUMEN EJECUTIVO ---
+    const rowsResumen = [];
+    rowsResumen.push(["Resumen Ejecutivo - Cotización de Servicios"]);
+    rowsResumen.push([]);
+    rowsResumen.push(["Datos del Proyecto"]);
+    rowsResumen.push(["Cliente", cotizacion.Cliente || "N/A"]);
+    rowsResumen.push(["Nombre de Obra", cotizacion.NombreObra || "N/A"]);
+    rowsResumen.push(["Días Permitidos de Corte", cotizacion.Dias_Permitidos_Corte || 0]);
+    rowsResumen.push(["Distancia Total (Ida y Vuelta)", `${cotizacion.Distancia_Ida_Vuelta_km || 0} km`]);
+    rowsResumen.push([]);
+    rowsResumen.push(["Macro-Partidas", "Costo", "Margen (%)", "Utilidad Neta", "Precio Venta"]);
     
-    // Header
-    rows.push([
-      "Equipo / Servicio", 
-      "Cantidad", 
-      "Costo Directo Unitario", 
-      "Estrategia", 
-      "% Margen Real",
-      "Gasto Admin Unitario", 
-      "Utilidad Neta Unitaria", 
-      "Precio Venta Unitario", 
-      "Precio Venta Total"
-    ]);
-    
-    let sumTotal = 0;
-    
-    // 1. Equipos Técnicos
+    // Equipos
+    let costoEquipos = 0, utilidadEquipos = 0, precioEquipos = 0;
     itemsParaExcel.forEach(item => {
-      const precioUnitario = item.precio_unitario_final || 0;
-      const precioTotal = precioUnitario * item.cantidad;
-      sumTotal += precioTotal;
+      costoEquipos += (item.costo_directo_unitario || 0) * (item.cantidad || 1);
+      utilidadEquipos += (item.utilidad_neta_unitaria || 0) * (item.cantidad || 1);
+      precioEquipos += (item.precio_unitario_final || 0) * (item.cantidad || 1);
+    });
+    const margenEquipos = precioEquipos > 0 ? (utilidadEquipos / precioEquipos) * 100 : 0;
+    rowsResumen.push([
+      "Subtotal de Equipos y Servicios Técnicos",
+      formatNumber(costoEquipos),
+      formatPercent(margenEquipos),
+      formatNumber(utilidadEquipos),
+      formatNumber(precioEquipos)
+    ]);
+
+    // Logística
+    const costoLogistica = resultados.Logistica_Global_Total || 0;
+    const utilidadLogistica = resultados.Ganancia_Logistica || 0;
+    const precioLogistica = resultados.Precio_Venta_Logistica || 0;
+    const margenLogistica = precioLogistica > 0 ? (utilidadLogistica / precioLogistica) * 100 : 0;
+    rowsResumen.push([
+      "Logística, Movilización y Despliegue",
+      formatNumber(costoLogistica),
+      formatPercent(margenLogistica),
+      formatNumber(utilidadLogistica),
+      formatNumber(precioLogistica)
+    ]);
+
+    // Alquileres
+    let costoAlquileres = 0, utilidadAlquileres = 0, precioAlquileres = 0;
+    alquileresExcel.forEach(alq => {
+      costoAlquileres += alq.costo_directo_unitario || 0;
+      utilidadAlquileres += alq.utilidad_neta_unitaria || 0;
+      precioAlquileres += alq.precio_unitario_final || 0;
+    });
+    const margenAlquileres = precioAlquileres > 0 ? (utilidadAlquileres / precioAlquileres) * 100 : 0;
+    if (precioAlquileres > 0) {
+      rowsResumen.push([
+        "Alquileres Especiales",
+        formatNumber(costoAlquileres),
+        formatPercent(margenAlquileres),
+        formatNumber(utilidadAlquileres),
+        formatNumber(precioAlquileres)
+      ]);
+    }
+
+    // Imprevistos
+    const costoImprevistos = resultados.Gastos_Imprevistos || 0;
+    const utilidadImprevistos = resultados.Ganancia_Imprevistos || 0;
+    const precioImprevistos = costoImprevistos + utilidadImprevistos; // sin admin
+    const margenImprevistos = precioImprevistos > 0 ? (utilidadImprevistos / precioImprevistos) * 100 : 0;
+    if (precioImprevistos > 0) {
+      rowsResumen.push([
+        "Gestión de Riesgos y Contingencias",
+        formatNumber(costoImprevistos),
+        formatPercent(margenImprevistos),
+        formatNumber(utilidadImprevistos),
+        formatNumber(precioImprevistos)
+      ]);
+    }
+
+    // Gastos Administrativos
+    const gastosAdmin = resultados.Gastos_Administrativos || 0;
+    rowsResumen.push([
+      "Gastos Administrativos / Financieros (Corporate Overhead)",
+      formatNumber(gastosAdmin),
+      "0%",
+      0,
+      formatNumber(gastosAdmin)
+    ]);
+
+    // Totales
+    const sumTotal = precioEquipos + precioLogistica + precioAlquileres + precioImprevistos + gastosAdmin;
+    rowsResumen.push([]);
+    rowsResumen.push(["", "", "", "SUBTOTAL", formatNumber(sumTotal)]);
+    rowsResumen.push(["", "", "", "IVA (10%)", formatNumber(sumTotal * 0.1)]);
+    rowsResumen.push(["", "", "", "GRAN TOTAL", formatNumber(sumTotal * 1.1)]);
+
+
+    // --- HOJA 2: DETALLE DE EQUIPOS ---
+    const rowsEquipos = [];
+    rowsEquipos.push([
+      "Equipo / Servicio",
+      "Estrategia",
+      "Cantidad",
+      "Horas Unitarias Estimadas",
+      "Horas Totales Estimadas",
+      "Costo Directo Base",
+      "Costo Service Fee",
+      "Costo Amortización",
+      "Costo Directo Total",
+      "Utilidad Neta Unitaria",
+      "Margen %",
+      "Precio Venta Unitario",
+      "Precio Venta Total del Ítem"
+    ]);
+
+    itemsParaExcel.forEach(item => {
+      const horasUnitarias = (item.overrides?.horas_equipo ?? item.baseData?.horas_equipo ?? 0);
+      const cantidad = item.cantidad || 1;
+      const horasTotales = horasUnitarias * cantidad;
       
+      const costoDirectoBase = (item.costo_directo_unitario || 0) - (item.costoServiceFee || 0) - (item.costoAmortizacion || 0);
+      const precioUnitario = item.precio_unitario_final || 0;
       const utilUnitaria = item.utilidad_neta_unitaria || 0;
       const margenReal = precioUnitario > 0 ? (utilUnitaria / precioUnitario) * 100 : 0;
-      
-      rows.push([
-        item.equipo, 
-        item.cantidad, 
-        Math.round(item.costo_directo_unitario || 0),
+
+      rowsEquipos.push([
+        item.equipo,
         item.estrategia || 'Normal',
-        `${margenReal.toFixed(1)}%`,
-        Math.round(item.admin_unitario || 0),
-        Math.round(utilUnitaria),
-        Math.round(precioUnitario), 
-        Math.round(precioTotal)
+        cantidad,
+        horasUnitarias,
+        horasTotales,
+        formatNumber(costoDirectoBase),
+        formatNumber(item.costoServiceFee || 0),
+        formatNumber(item.costoAmortizacion || 0),
+        formatNumber(item.costo_directo_unitario || 0),
+        formatNumber(utilUnitaria),
+        formatPercent(margenReal),
+        formatNumber(precioUnitario),
+        formatNumber(precioUnitario * cantidad)
       ]);
     });
 
-    // 2. Alquileres
-    alquileresExcel.forEach(alq => {
-      const precioUnitario = alq.precio_unitario_final || 0;
-      sumTotal += precioUnitario; 
-      const utilUnitaria = alq.utilidad_neta_unitaria || 0;
-      const margenReal = precioUnitario > 0 ? (utilUnitaria / precioUnitario) * 100 : 0;
-      
-      rows.push([
-        `Alquiler Especial: ${alq.descripcion}`, 
-        1, 
-        Math.round(alq.costo_directo_unitario || 0),
-        alq.estrategia || 'Alquiler Especial',
-        `${margenReal.toFixed(1)}%`,
-        Math.round(alq.admin_unitario || 0),
-        Math.round(utilUnitaria),
-        Math.round(precioUnitario), 
-        Math.round(precioUnitario)
-      ]);
-    });
 
-    // 3. Logística
-    if (resultados.Precio_Venta_Logistica > 0) {
-      sumTotal += resultados.Precio_Venta_Logistica;
-      
-      const costoLogistica = resultados.Logistica_Global_Total || 0;
-      const adminLogistica = costoLogistica * (Variables_Globales.Gastos_Administrativos_Porcentaje / 100);
-      const utilidadLogistica = resultados.Ganancia_Logistica || 0;
-      
-      const margenReal = resultados.Precio_Venta_Logistica > 0 ? (utilidadLogistica / resultados.Precio_Venta_Logistica) * 100 : 0;
-      
-      rows.push([
-        `Logística, Movilización y Despliegue`, 
-        1, 
-        Math.round(costoLogistica),
-        "Logística Global",
-        `${margenReal.toFixed(1)}%`,
-        Math.round(adminLogistica),
-        Math.round(utilidadLogistica),
-        Math.round(resultados.Precio_Venta_Logistica), 
-        Math.round(resultados.Precio_Venta_Logistica)
-      ]);
-    }
+    // --- HOJA 3: LOGÍSTICA Y ALQUILERES ---
+    const rowsLogistica = [];
+    rowsLogistica.push(["Alquileres Especiales"]);
+    rowsLogistica.push(["Descripción", "Cantidad", "Costo Directo", "Margen %", "Precio Venta Unitario", "Precio Venta Total"]);
     
-    // 4. Imprevistos (Gestión de Riesgos)
-    if (resultados.Ganancia_Imprevistos > 0 || resultados.Gastos_Imprevistos > 0) {
-      const costoImprevistos = resultados.Gastos_Imprevistos || 0;
-      const adminImprevistos = costoImprevistos * (Variables_Globales.Gastos_Administrativos_Porcentaje / 100);
-      const utilidadImprevistos = resultados.Ganancia_Imprevistos || 0;
-      const precioImprevistos = costoImprevistos + adminImprevistos + utilidadImprevistos;
-      
-      sumTotal += precioImprevistos;
-      
-      const margenReal = precioImprevistos > 0 ? (utilidadImprevistos / precioImprevistos) * 100 : 0;
-      
-      rows.push([
-        `Gestión de Riesgos y Contingencias Operativas`, 
-        1, 
-        Math.round(costoImprevistos),
-        "Gestión de Riesgos",
-        `${margenReal.toFixed(1)}%`,
-        Math.round(adminImprevistos),
-        Math.round(utilidadImprevistos),
-        Math.round(precioImprevistos), 
-        Math.round(precioImprevistos)
-      ]);
+    if (alquileresExcel.length === 0) {
+      rowsLogistica.push(["Sin alquileres especiales", "-", "-", "-", "-", "-"]);
+    } else {
+      alquileresExcel.forEach(alq => {
+        const utilUnitaria = alq.utilidad_neta_unitaria || 0;
+        const precioUnitario = alq.precio_unitario_final || 0;
+        const margenReal = precioUnitario > 0 ? (utilUnitaria / precioUnitario) * 100 : 0;
+        rowsLogistica.push([
+          alq.descripcion,
+          1,
+          formatNumber(alq.costo_directo_unitario || 0),
+          formatPercent(margenReal),
+          formatNumber(precioUnitario),
+          formatNumber(precioUnitario)
+        ]);
+      });
     }
-    
-    // Subtotal y Finales
-    rows.push(["", "", "", "", "", "", "", "", ""]); // Fila vacía
-    rows.push(["", "", "", "", "", "", "", "SUBTOTAL", Math.round(sumTotal)]);
-    rows.push(["", "", "", "", "", "", "", "IVA (10%)", Math.round(sumTotal * 0.1)]);
-    rows.push(["", "", "", "", "", "", "", "GRAN TOTAL", Math.round(sumTotal * 1.1)]);
 
-    // 4. Export
-    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    rowsLogistica.push([]);
+    rowsLogistica.push(["Métricas de Logística"]);
+    rowsLogistica.push(["Distancia Total (km)", cotizacion.Distancia_Ida_Vuelta_km || 0]);
+    rowsLogistica.push(["Días Permitidos de Corte", cotizacion.Dias_Permitidos_Corte || 0]);
+    rowsLogistica.push(["Personal Simultáneo Estimado", resultados.Personal_Simultaneo || 0]);
+    rowsLogistica.push(["Cantidad de Vehículos", resultados.Cantidad_Vehiculos || 0]);
+
+
+    // Crear libro y hojas
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Cotización");
+    
+    const wsResumen = XLSX.utils.aoa_to_sheet(rowsResumen);
+    const wsEquipos = XLSX.utils.aoa_to_sheet(rowsEquipos);
+    const wsLogistica = XLSX.utils.aoa_to_sheet(rowsLogistica);
+
+    // Ajustar anchos
+    wsResumen['!cols'] = [{wch: 50}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}];
+    wsEquipos['!cols'] = [{wch: 35}, {wch: 15}, {wch: 10}, {wch: 22}, {wch: 20}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 12}, {wch: 20}, {wch: 22}];
+    wsLogistica['!cols'] = [{wch: 40}, {wch: 10}, {wch: 15}, {wch: 12}, {wch: 20}, {wch: 20}];
+
+    XLSX.utils.book_append_sheet(workbook, wsResumen, "Resumen Ejecutivo");
+    XLSX.utils.book_append_sheet(workbook, wsEquipos, "Detalle de Equipos");
+    XLSX.utils.book_append_sheet(workbook, wsLogistica, "Logística y Alquileres");
     
     let fileName = 'Cotizacion_SinNombre.xlsx';
     if (cotizacion.Cliente && cotizacion.NombreObra) {
@@ -139,9 +209,7 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
       fileName = `Cotizacion_${cotizacion.NombreObra}.xlsx`;
     }
     
-    // Replace spaces with underscores for a clean filename
     fileName = fileName.replace(/\s+/g, '_');
-    
     XLSX.writeFile(workbook, fileName);
   };
 
@@ -151,6 +219,8 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
     (resultados.Ganancia_Imprevistos || 0) + 
     (resultados.Ganancia_Tercerizados_Nuevos || 0) + 
     (resultados.Ganancia_Alquileres || 0) + 
+    (resultados.Ganancia_ServiceFee_Total || 0) + 
+    (resultados.Ganancia_Amortizacion_Total || 0) + 
     (resultados.Utilidad_Oculta_TopDown || 0);
 
   const margenRealUI = resultados.Precio_Venta_Final > 0 
@@ -178,7 +248,7 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
 
   const generateERPMemory = () => {
     const logisticaText = cotizacion.logisticsOverrides?.enabled ? 'Sobrescritura Manual Activa' : 'Cálculo Automático';
-    const topDownText = resultados.Utilidad_Oculta_TopDown > 0 ? `Activo en ${resultados.Cantidad_Trafos || 1} equipos` : 'No utilizado';
+    const topDownText = resultados.Utilidad_Oculta_TopDown > 0 ? `Activo en ${resultados.Cantidad_Equipos_TopDown || 1} equipos` : 'No utilizado';
 
     return `MEMORIA DE CÁLCULO - ZUNZ COTIZADOR
 -----------------------------------------
@@ -289,11 +359,11 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
               </div>
             )}
 
-            {resultados.Precio_Mercado_Aplicado > 0 && (
+            {resultados.Precio_Mercado_Total_Trafos > 0 && (
               <div style={{ background: '#ecfdf5', color: '#059669', padding: '10px', borderRadius: '4px', marginBottom: '10px', border: '1px solid #10b981' }}>
-                <strong>Estrategia Top-Down Activa:</strong> El precio fue fijado por valor de mercado.
+                <strong>Estrategia Top-Down Activa:</strong> Precios fijados por valor de mercado.
                 <div style={{ marginTop: '5px', color: '#064e3b', fontSize: '0.9rem' }}>
-                  Valor Inyectado: <strong>{formatGs(cotizacion.Precio_Mercado_Aplicado)}</strong> (x {resultados.Cantidad_Trafos} unidades = {formatGs(resultados.Precio_Mercado_Total_Trafos)})
+                  Total {resultados.Cantidad_Equipos_TopDown} unidades impactadas (Valor Acumulado: {formatGs(resultados.Precio_Mercado_Total_Trafos)})
                 </div>
               </div>
             )}
@@ -365,7 +435,7 @@ export default function CRMFinancialPanel({ resultados, cotizacion, equiposCotiz
               <div style={{ marginBottom: '5px' }}>
                 <strong style={{ color: 'var(--accent)', display: 'block', marginBottom: '5px' }}>[ESTRATEGIA COMERCIAL Y COBERTURA]</strong>
                 • Fondo de Imprevistos: {formatGs(resultados.Gastos_Imprevistos)}<br/>
-                • Inyección Top-Down: {resultados.Utilidad_Oculta_TopDown > 0 ? `Activo en ${resultados.Cantidad_Trafos || 1} equipos` : 'No utilizado'}<br/>
+                • Inyección Top-Down: {resultados.Utilidad_Oculta_TopDown > 0 ? `Activo en ${resultados.Cantidad_Equipos_TopDown || 1} equipos` : 'No utilizado'}<br/>
                 • Gestión Logística: {cotizacion.logisticsOverrides?.enabled ? 'Sobrescritura Manual Activa' : 'Cálculo Automático'}
               </div>
             </div>
