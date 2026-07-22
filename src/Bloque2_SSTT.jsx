@@ -14,7 +14,18 @@ import './index.css';
 const DEDUCTED_HOSPEDAJE_RATE = 200000;
 const DEDUCTED_VIATICO_RATE = 100000;
 
-function Bloque2_SSTT({ setTotalServicios, setDetalleServicios }) {
+function Bloque2_SSTT({ 
+  setTotalServicios, 
+  setDetalleServicios,
+  monedaTrabajo = 'USD',
+  tipoCambio = 7500,
+  nombreCliente = '',
+  nombreProyecto = '',
+  setNombreCliente,
+  setNombreProyecto,
+  onGuardar,
+  isSaving
+}) {
   const [tension, setTension] = useState('500 kV');
   const [equipo, setEquipo] = useState('');
   const [cantidad, setCantidad] = useState(1);
@@ -36,12 +47,6 @@ function Bloque2_SSTT({ setTotalServicios, setDetalleServicios }) {
   
   // Saved Quotes
   const [showSavedQuotesPanel, setShowSavedQuotesPanel] = useState(false);
-
-  // Client Metadata
-  const [cliente, setCliente] = useState('');
-  const [nombreObra, setNombreObra] = useState('');
-  
-  // Nube: Estado de los datos maestros
   const [maestroData, setMaestroData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -101,8 +106,6 @@ function Bloque2_SSTT({ setTotalServicios, setDetalleServicios }) {
     setGastosImprevistos(0);
     setMargenImprevistosPorcentaje(0);
     setLogisticsOverrides({ enabled: false });
-    setCliente('');
-    setNombreObra('');
     setIsDirty(false);
   };
 
@@ -356,8 +359,8 @@ function Bloque2_SSTT({ setTotalServicios, setDetalleServicios }) {
     setMargenImprevistosPorcentaje(quote.Margen_Imprevistos_Porcentaje || 0);
     setLogisticsOverrides(quote.logisticsOverrides || { enabled: false });
     
-    setCliente(quote.Cliente || '');
-    setNombreObra(quote.NombreObra || '');
+    if (setNombreCliente) setNombreCliente(quote.Cliente || quote.datosGenerales?.nombreCliente || '');
+    if (setNombreProyecto) setNombreProyecto(quote.NombreObra || quote.datosGenerales?.nombreProyecto || '');
     setIsDirty(false);
   };
 
@@ -391,27 +394,7 @@ function Bloque2_SSTT({ setTotalServicios, setDetalleServicios }) {
     );
   }
 
-  const handleSaveCotizacion = async () => {
-    if (!cliente || !nombreObra) return alert("Por favor, ingresa el Cliente y Nombre de la Obra.");
-    try {
-      await saveCotizacion({
-        Cliente: cliente,
-        NombreObra: nombreObra,
-        distanciaKm,
-        diasPermitidosCorte,
-        equiposCotizados: cart,
-        alquileres: alquileres,
-        logisticsOverrides: logisticsOverrides,
-        Gastos_Imprevistos: gastosImprevistos,
-        Margen_Imprevistos_Porcentaje: margenImprevistosPorcentaje,
-        Precio_Venta_Final: resultadosCalculados.Precio_Venta_Final
-      });
-      setIsDirty(false);
-      alert("✅ Cotización guardada exitosamente en la base de datos.");
-    } catch (e) {
-      alert("Hubo un error al guardar la cotización.");
-    }
-  };
+  // Local save logic removed (Delegated to EPCDashboard)
 
   return (
     <div className="app-container">
@@ -746,20 +729,25 @@ function Bloque2_SSTT({ setTotalServicios, setDetalleServicios }) {
                 >
                   <DatabaseIcon size={16} /> Mis Cotizaciones
                 </button>
-                <button className="primary-btn" onClick={handleSaveCotizacion} style={{ width: 'auto', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Save size={16} /> Guardar
+                <button 
+                  className="primary-btn" 
+                  onClick={onGuardar}
+                  disabled={isSaving}
+                  style={{ width: 'auto', padding: '8px 16px', background: '#10b981', display: 'flex', alignItems: 'center', gap: '5px' }}
+                >
+                  💾 {isSaving ? 'Guardando...' : 'Guardar'}
                 </button>
               </div>
             </div>
             
             <div className="config-grid">
               <div className="form-group">
-                <label>Cliente / Empresa</label>
-                <input type="text" placeholder="Ej: ANDE, Consorcio..." value={cliente} onChange={(e) => { setCliente(e.target.value); setIsDirty(true); }} />
+                <label>Cliente / Empresa (Configurado en Bloque 0)</label>
+                <input type="text" value={nombreCliente} readOnly style={{ background: '#f8fafc', color: '#64748b' }} />
               </div>
               <div className="form-group">
-                <label>Nombre del Proyecto</label>
-                <input type="text" placeholder="Ej: Ampliación SE Limpio" value={nombreObra} onChange={(e) => { setNombreObra(e.target.value); setIsDirty(true); }} />
+                <label>Nombre del Proyecto (Configurado en Bloque 0)</label>
+                <input type="text" value={nombreProyecto} readOnly style={{ background: '#f8fafc', color: '#64748b' }} />
               </div>
             </div>
           </div>
@@ -843,9 +831,19 @@ function Bloque2_SSTT({ setTotalServicios, setDetalleServicios }) {
           <div className="odoo-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <h2 style={{ margin: 0 }}><Calculator size={20} /> Carrito Técnico</h2>
-              <button className="primary-btn" onClick={() => setShowAdHocModal(true)} style={{ width: 'auto', padding: '8px 16px', background: '#10b981' }}>
-                <PackagePlus size={16} /> Ítem Ad-Hoc
-              </button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button 
+                  className="primary-btn" 
+                  onClick={onGuardar}
+                  disabled={isSaving}
+                  style={{ width: 'auto', padding: '8px 16px', background: '#10b981', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  💾 {isSaving ? 'Guardando...' : 'Guardar Progreso'}
+                </button>
+                <button className="primary-btn" onClick={() => setShowAdHocModal(true)} style={{ width: 'auto', padding: '8px 16px', background: '#10b981' }}>
+                  <PackagePlus size={16} /> Ítem Ad-Hoc
+                </button>
+              </div>
             </div>
             
             <div style={{ maxHeight: '45vh', overflowY: 'auto', paddingRight: '5px' }}>

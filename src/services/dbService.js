@@ -1,4 +1,4 @@
-import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 // Obtiene el catálogo de equipos desde la nube
 export const fetchEquiposMaestros = async () => {
@@ -62,6 +62,28 @@ export const getTensionsFromData = (data) => {
 
 export const getEquipmentsByTensionFromData = (data, tension) => {
   return data.filter(e => e.tension === tension);
+};
+
+// Guardar o actualizar cotización (Upsert) en cotizaciones_v2
+export const upsertCotizacionV2 = async (id, cotizacionData) => {
+  try {
+    const payload = {
+      ...cotizacionData,
+      fecha_actualizacion: serverTimestamp()
+    };
+    if (!id) {
+      payload.fecha_creacion = serverTimestamp();
+      const docRef = await addDoc(collection(db, 'cotizaciones_v2'), payload);
+      return docRef.id;
+    } else {
+      const docRef = doc(db, 'cotizaciones_v2', id);
+      await setDoc(docRef, payload, { merge: true });
+      return id;
+    }
+  } catch (error) {
+    console.error("Error en upsertCotizacionV2:", error);
+    throw error;
+  }
 };
 
 

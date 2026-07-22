@@ -7,12 +7,19 @@ export default function Bloque3_Resumen({
   totalServicios = 0, 
   detalleProcura = [], 
   detalleServicios = [],
-  tipoCambio = 7500
+  tipoCambio = 7500,
+  monedaTrabajo = 'USD',
+  onGuardar,
+  isSaving
 }) {
   const granTotal = (Number(totalProcura) * tipoCambio || 0) + (Number(totalServicios) || 0);
 
-  const formatMoneda = (val) => {
-    return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(val);
+  const formatMoneda = (valGs) => {
+    if (monedaTrabajo === 'USD') {
+      const valUSD = valGs / tipoCambio;
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(valUSD);
+    }
+    return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(valGs);
   };
 
   // EXPORTACIÓN EXCEL AUDITABLE CONSOLIDADA (MASTER DELIVERABLE)
@@ -249,25 +256,47 @@ export default function Bloque3_Resumen({
             </div>
           </div>
 
-          {/* BOTÓN DE EXPORTACIÓN EXCEL AUDITABLE */}
-          <button 
-            onClick={exportarAExcelAuditable}
-            className="primary-btn"
-            style={{
-              width: 'auto',
-              padding: '12px 24px',
-              background: '#10b981',
-              color: '#ffffff',
-              borderRadius: '8px',
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              boxShadow: '0 4px 6px -1px rgba(16,185,129,0.2)'
-            }}
-          >
-            <FileSpreadsheet size={20} /> Exportar Entregable Auditable Excel (.xlsx)
-          </button>
+          {/* BOTONES DE ACCIONES CONSOLIDADAS */}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              onClick={onGuardar}
+              disabled={isSaving}
+              className="primary-btn"
+              style={{
+                width: 'auto',
+                padding: '12px 24px',
+                background: '#3b82f6',
+                color: '#ffffff',
+                borderRadius: '8px',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                boxShadow: '0 4px 6px -1px rgba(59,130,246,0.2)'
+              }}
+            >
+              💾 {isSaving ? 'Guardando...' : 'Guardar Progreso'}
+            </button>
+            
+            <button 
+              onClick={exportarAExcelAuditable}
+              className="primary-btn"
+              style={{
+                width: 'auto',
+                padding: '12px 24px',
+                background: '#10b981',
+                color: '#ffffff',
+                borderRadius: '8px',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                boxShadow: '0 4px 6px -1px rgba(16,185,129,0.2)'
+              }}
+            >
+              <FileSpreadsheet size={20} /> Exportar Entregable Auditable Excel (.xlsx)
+            </button>
+          </div>
         </div>
       </div>
 

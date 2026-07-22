@@ -29,7 +29,7 @@ const diccionarioNCM = [
   { ncm: '8504.34.00', desc: 'Transformadores de medida y auxiliares', arancel: 6 }
 ];
 
-export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, tipoCambio = 7500, setTipoCambio }) {
+export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, tipoCambio = 7500, setTipoCambio, monedaTrabajo = 'USD', onGuardar, isSaving }) {
   // ESTADO GLOBAL DE MONEDA (Única fuente de la verdad en USD)
   const [moneda, setMoneda] = useState('USD'); // 'USD' vs 'Gs.'
 
@@ -226,6 +226,11 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
     }
   }, [resTotales.precio, equipos, setTotalProcura, setDetalleProcura]);
 
+  // Sincronizar moneda de visualización con monedaTrabajo del Bloque 0
+  useEffect(() => {
+    setMoneda(monedaTrabajo === 'USD' ? 'USD' : 'Gs.');
+  }, [monedaTrabajo]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
       
@@ -283,6 +288,15 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
                 </span>
               )}
             </div>
+
+            <button 
+              className="primary-btn" 
+              onClick={onGuardar}
+              disabled={isSaving}
+              style={{ width: 'auto', padding: '10px 20px', background: '#10b981', display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              💾 {isSaving ? 'Guardando...' : 'Guardar Progreso'}
+            </button>
 
             <button 
               className="primary-btn" 

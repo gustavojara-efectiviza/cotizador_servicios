@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import Bloque0_Setup from './Bloque0_Setup';
 import Bloque1_Procura from './Bloque1_Procura';
 import Bloque2_SSTT from './Bloque2_SSTT';
 import Bloque3_Resumen from './Bloque3_Resumen';
+import { upsertCotizacionV2 } from './services/dbService';
 import { 
   Zap, 
   Building2, 
@@ -31,7 +33,59 @@ export default function EPCDashboard() {
   const [totalServicios, setTotalServicios] = useState(0);
   const [detalleProcura, setDetalleProcura] = useState([]);
   const [detalleServicios, setDetalleServicios] = useState([]);
-  const [tipoCambio, setTipoCambio] = useState(7500);
+
+  // Estado Global Bloque 0
+  const [nombreCliente, setNombreCliente] = useState('');
+  const [nombreProyecto, setNombreProyecto] = useState('');
+  const [monedaTrabajo, setMonedaTrabajo] = useState('USD'); // 'USD' vs 'PYG'
+  const [tipoCambioCompra, setTipoCambioCompra] = useState(7400);
+  const [tipoCambioVenta, setTipoCambioVenta] = useState(7500);
+  const [cotizacionId, setCotizacionId] = useState(null);
+  
+  // Estado de guardado y Toast
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  const [isSaving, setIsSaving] = useState(false);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 4000);
+  };
+
+  const guardarCotizacionMaestra = async () => {
+    if (!nombreCliente.trim() || !nombreProyecto.trim()) {
+      showToast('Por favor, ingresa el Cliente y Nombre del Proyecto en el Bloque 0.', 'error');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const dataToSave = {
+        datosGenerales: {
+          nombreCliente,
+          nombreProyecto,
+          monedaTrabajo,
+          tipoCambioCompra,
+          tipoCambioVenta
+        },
+        detalleProcura,
+        detalleServicios,
+        totales: {
+          totalProcura,
+          totalServicios,
+          granTotalGs: (totalProcura * tipoCambioVenta) + totalServicios,
+          granTotalUSD: totalProcura + (totalServicios / tipoCambioVenta)
+        }
+      };
+
+      const returnedId = await upsertCotizacionV2(cotizacionId, dataToSave);
+      setCotizacionId(returnedId);
+      showToast(cotizacionId ? 'Borrador actualizado con éxito' : 'Borrador guardado exitosamente');
+    } catch (error) {
+      console.error(error);
+      showToast('Error al intentar guardar la cotización.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Nombres descriptivos para la UI
   const perfiles = {
@@ -219,6 +273,19 @@ export default function EPCDashboard() {
       {/* 3. ÁREA PRINCIPAL CON RENDERIZADO SECUENCIAL DE LOS 3 BLOQUES */}
       <main style={{ padding: '30px 40px', maxWidth: '1400px', margin: '0 auto', width: '100%', flex: 1 }}>
         
+        <Bloque0_Setup
+          nombreCliente={nombreCliente}
+          setNombreCliente={setNombreCliente}
+          nombreProyecto={nombreProyecto}
+          setNombreProyecto={setNombreProyecto}
+          monedaTrabajo={monedaTrabajo}
+          setMonedaTrabajo={setMonedaTrabajo}
+          tipoCambioCompra={tipoCambioCompra}
+          setTipoCambioCompra={setTipoCambioCompra}
+          tipoCambioVenta={tipoCambioVenta}
+          setTipoCambioVenta={setTipoCambioVenta}
+        />
+        
         {/* BANNER INFORMATIVO DE SECTOR */}
         <div className="odoo-card" style={{ marginBottom: '25px', borderLeft: '4px solid #2563eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
@@ -239,8 +306,11 @@ export default function EPCDashboard() {
             <Bloque1_Procura 
               setTotalProcura={setTotalProcura} 
               setDetalleProcura={setDetalleProcura} 
-              tipoCambio={tipoCambio} 
-              setTipoCambio={setTipoCambio} 
+              tipoCambio={tipoCambioVenta} 
+              setTipoCambio={setTipoCambioVenta} 
+              monedaTrabajo={monedaTrabajo}
+              onGuardar={guardarCotizacionMaestra}
+              isSaving={isSaving}
             />
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
               <button 
@@ -283,7 +353,18 @@ export default function EPCDashboard() {
               </div>
               
               <div style={{ margin: '20px 0' }}>
-                <Bloque2_SSTT setTotalServicios={setTotalServicios} setDetalleServicios={setDetalleServicios} />
+                <Bloque2_SSTT 
+                  setTotalServicios={setTotalServicios} 
+                  setDetalleServicios={setDetalleServicios} 
+                  monedaTrabajo={monedaTrabajo}
+                  tipoCambio={tipoCambioVenta}
+                  nombreCliente={nombreCliente}
+                  nombreProyecto={nombreProyecto}
+                  setNombreCliente={setNombreCliente}
+                  setNombreProyecto={setNombreProyecto}
+                  onGuardar={guardarCotizacionMaestra}
+                  isSaving={isSaving}
+                />
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
@@ -314,7 +395,10 @@ export default function EPCDashboard() {
               totalServicios={totalServicios} 
               detalleProcura={detalleProcura}
               detalleServicios={detalleServicios}
-              tipoCambio={tipoCambio}
+              tipoCambio={tipoCambioVenta}
+              monedaTrabajo={monedaTrabajo}
+              onGuardar={guardarCotizacionMaestra}
+              isSaving={isSaving}
             />
             <div style={{ marginTop: '15px', display: 'flex', justifyContent: 'flex-start' }}>
               <button 
@@ -329,6 +413,28 @@ export default function EPCDashboard() {
         )}
 
       </main>
+
+      {/* FLOATING TOAST NOTIFICATION */}
+      {toast.show && (
+        <div style={{
+          position: 'fixed',
+          bottom: '25px',
+          right: '25px',
+          background: toast.type === 'error' ? '#ef4444' : '#10b981',
+          color: '#ffffff',
+          padding: '14px 24px',
+          borderRadius: '8px',
+          boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+          zIndex: 9999,
+          fontWeight: 700,
+          fontSize: '0.95rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          {toast.type === 'error' ? '❌' : '✅'} {toast.message}
+        </div>
+      )}
 
     </div>
   );
