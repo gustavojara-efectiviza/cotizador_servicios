@@ -257,7 +257,7 @@ export default function Bloque1_Procura({
         const worksheet = workbook.Sheets[firstSheetName];
         const sheetDataRaw = XLSX.utils.sheet_to_json(worksheet);
 
-        // Normalizar claves y resolver sinónimos (case-insensitive, accent-resilient)
+        // Normalizar claves y resolver sinónimos usando coincidencia parcial (fuzzy matching)
         const normalizeHeader = (str) => {
           if (!str) return '';
           return String(str)
@@ -273,17 +273,18 @@ export default function Bloque1_Procura({
             const rawValue = row[key];
             const normKey = normalizeHeader(key);
 
-            if (normKey === 'item' || normKey === 'nombre' || normKey === 'equipo' || normKey === 'suministro' || normKey === 'descripcion') {
+            // Coincidencia parcial para alta tolerancia de sinónimos
+            if (normKey.includes('item') || normKey.includes('nombre') || normKey.includes('equipo') || normKey.includes('suministro') || normKey.includes('desc') || normKey.includes('prod') || normKey.includes('det')) {
               normalizedRow['Ítem'] = rawValue;
-            } else if (normKey === 'cantidad' || normKey === 'cant' || normKey === 'qty' || normKey === 'unidad' || normKey === 'unidades') {
+            } else if (normKey.includes('cant') || normKey.includes('qty') || normKey.includes('unid') || normKey.includes('nro') || normKey.includes('num') || normKey.includes('vol')) {
               normalizedRow['Cantidad'] = rawValue;
-            } else if (normKey === 'modalidad' || normKey === 'tipo' || normKey === 'incoterm' || normKey === 'modalidaddecompra' || normKey === 'modalidadentrega') {
+            } else if (normKey.includes('modal') || normKey.includes('tipo') || normKey.includes('incoterm') || normKey.includes('compra') || normKey.includes('entrega')) {
               normalizedRow['Modalidad'] = rawValue;
-            } else if (normKey === 'costobase' || normKey === 'costounitario' || normKey === 'costo' || normKey === 'fob' || normKey === 'precio' || normKey === 'costobaseunitario') {
+            } else if (normKey.includes('cost') || normKey.includes('fob') || normKey.includes('exw') || normKey.includes('prec') || normKey.includes('price') || normKey.includes('base') || normKey.includes('unit') || normKey.includes('valor')) {
               normalizedRow['Costo Base'] = rawValue;
-            } else if (normKey === 'ncm' || normKey === 'codigoncm' || normKey === 'codigo') {
+            } else if (normKey.includes('ncm') || normKey.includes('cod')) {
               normalizedRow['NCM'] = rawValue;
-            } else if (normKey === 'arancel' || normKey === 'arancelporcentaje' || normKey === 'arancelpct' || normKey === 'porcentajearancel') {
+            } else if (normKey.includes('aran') || normKey.includes('tax') || normKey.includes('imp')) {
               normalizedRow['Arancel %'] = rawValue;
             } else {
               normalizedRow[key.trim()] = rawValue;
@@ -298,7 +299,7 @@ export default function Bloque1_Procura({
           const firstRowKeys = Object.keys(sheetData[0]);
           const missing = requiredCols.filter(col => !firstRowKeys.includes(col));
           if (missing.length > 0) {
-            alert(`El Excel no cumple con el formato requerido. Columnas faltantes: ${missing.join(', ')}`);
+            alert(`El Excel no cumple con el formato requerido. \n\nColumnas detectadas: ${firstRowKeys.join(', ')} \nColumnas faltantes: ${missing.join(', ')} \n\nPor favor, verifica los nombres de tus columnas.`);
             return;
           }
         } else {
