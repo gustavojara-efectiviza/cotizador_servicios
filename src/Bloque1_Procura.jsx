@@ -257,13 +257,39 @@ export default function Bloque1_Procura({
         const worksheet = workbook.Sheets[firstSheetName];
         const sheetDataRaw = XLSX.utils.sheet_to_json(worksheet);
 
-        // Normalizar y recortar espacios en blanco de las claves de cabecera (ADHD resilient)
+        // Normalizar claves y resolver sinónimos (case-insensitive, accent-resilient)
+        const normalizeHeader = (str) => {
+          if (!str) return '';
+          return String(str)
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "") // Quitar acentos
+            .replace(/[^a-z0-9]/g, ""); // Quitar caracteres especiales
+        };
+
         const sheetData = sheetDataRaw.map(row => {
-          const normalized = {};
+          const normalizedRow = {};
           Object.keys(row).forEach(key => {
-            normalized[key.trim()] = row[key];
+            const rawValue = row[key];
+            const normKey = normalizeHeader(key);
+
+            if (normKey === 'item' || normKey === 'nombre' || normKey === 'equipo' || normKey === 'suministro' || normKey === 'descripcion') {
+              normalizedRow['Ítem'] = rawValue;
+            } else if (normKey === 'cantidad' || normKey === 'cant' || normKey === 'qty' || normKey === 'unidad' || normKey === 'unidades') {
+              normalizedRow['Cantidad'] = rawValue;
+            } else if (normKey === 'modalidad' || normKey === 'tipo' || normKey === 'incoterm' || normKey === 'modalidaddecompra' || normKey === 'modalidadentrega') {
+              normalizedRow['Modalidad'] = rawValue;
+            } else if (normKey === 'costobase' || normKey === 'costounitario' || normKey === 'costo' || normKey === 'fob' || normKey === 'precio' || normKey === 'costobaseunitario') {
+              normalizedRow['Costo Base'] = rawValue;
+            } else if (normKey === 'ncm' || normKey === 'codigoncm' || normKey === 'codigo') {
+              normalizedRow['NCM'] = rawValue;
+            } else if (normKey === 'arancel' || normKey === 'arancelporcentaje' || normKey === 'arancelpct' || normKey === 'porcentajearancel') {
+              normalizedRow['Arancel %'] = rawValue;
+            } else {
+              normalizedRow[key.trim()] = rawValue;
+            }
           });
-          return normalized;
+          return normalizedRow;
         });
 
         // Validar columnas requeridas
