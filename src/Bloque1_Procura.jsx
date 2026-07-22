@@ -13,12 +13,10 @@ import {
   CheckCircle2, 
   FileText, 
   ArrowRightLeft, 
-  ShieldAlert, 
-  Truck, 
-  Building, 
-  Search,
-  Check
+  Upload,
+  Boxes
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 // DICCIONARIO NCM (Mock Local)
 const diccionarioNCM = [
@@ -29,32 +27,51 @@ const diccionarioNCM = [
   { ncm: '8504.34.00', desc: 'Transformadores de medida y auxiliares', arancel: 6 }
 ];
 
-export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, tipoCambio = 7500, setTipoCambio, monedaTrabajo = 'USD', onGuardar, isSaving }) {
-  // ESTADO GLOBAL DE MONEDA (Única fuente de la verdad en USD)
-  const [moneda, setMoneda] = useState('USD'); // 'USD' vs 'Gs.'
+export default function Bloque1_Procura({ 
+  setTotalProcura, 
+  setDetalleProcura, 
+  tipoCambio = 7500, 
+  setTipoCambio, 
+  monedaTrabajo = 'USD', 
+  onGuardar, 
+  isSaving 
+}) {
+  // ESTADO VISUAL DE MONEDA LOCAL
+  const [moneda, setMoneda] = useState('USD'); 
 
-  // LISTA DE EQUIPOS A IMPORTAR
+  // FASE 1: PANEL GLOBAL "SETEA Y OLVIDA"
+  const [defaults, setDefaults] = useState({
+    fleteBase: 5,
+    seguroBase: 2,
+    despachoBase: 6,
+    financieroBase: 3,
+    adminBase: 3,
+    arancelBase: 0,
+    margenBase: 30
+  });
+
+  // LISTA DE EQUIPOS
   const [equipos, setEquipos] = useState([
     {
       id: crypto.randomUUID(),
       nombre: 'Transformador de Potencia 80 MVA 220/23 kV',
       cantidad: 1,
-      costoBase: 450000, // USD FOB
-      tipoFlete: 'porcentaje', // 'monto' vs 'porcentaje'
-      valorFlete: 5, // 5% de flete marítimo/terrestre
-      porcentajeSeguro: 2, // 2% seguro internacional
+      costoBase: 450000, // FOB
+      modalidad: 'FOB/EXW', // 'FOB/EXW' | 'CIP' | 'Local'
       ncm: '8504.23.00',
-      porcentajeArancel: 0,
-      porcentajeDespacho: 6,
+      porcentajeArancel: undefined, // undefined indica que usa el global por defecto
+      valorFlete: undefined,
+      porcentajeSeguro: undefined,
+      porcentajeDespacho: undefined,
       aplicarFleteLocal: true,
-      montoFleteLocal: 3500, // USD flete interno a obra
-      porcentajeFinanciero: 3,
-      porcentajeAdmin: 3,
-      margenPorcentaje: 30
+      montoFleteLocal: 3500,
+      porcentajeFinanciero: undefined,
+      porcentajeAdmin: undefined,
+      margenPorcentaje: undefined
     }
   ]);
 
-  // ESTADO DE MODAL DE EDICIÓN / ADICIÓN
+  // ESTADO DE MODAL DE ADICIÓN / EDICIÓN
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
@@ -62,22 +79,22 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
     nombre: '',
     cantidad: 1,
     costoBase: 0,
-    tipoFlete: 'porcentaje',
-    valorFlete: 4,
-    porcentajeSeguro: 2,
+    modalidad: 'FOB/EXW',
     ncm: '8504.23.00',
-    porcentajeArancel: 0,
-    porcentajeDespacho: 6,
+    porcentajeArancel: undefined,
+    valorFlete: undefined,
+    porcentajeSeguro: undefined,
+    porcentajeDespacho: undefined,
     aplicarFleteLocal: false,
     montoFleteLocal: 1500,
-    porcentajeFinanciero: 3,
-    porcentajeAdmin: 3,
-    margenPorcentaje: 30
+    porcentajeFinanciero: undefined,
+    porcentajeAdmin: undefined,
+    margenPorcentaje: undefined
   };
 
   const [formData, setFormData] = useState(initialFormState);
 
-  // MANEJADOR DEL CAMBIO DE MONEDA CON PROMPT VIRTUAL / VISUAL
+  // MANEJADOR DEL CAMBIO DE MONEDA VISUAL
   const handleToggleMoneda = () => {
     if (moneda === 'USD') {
       const tc = window.prompt('Ingresa el Tipo de Cambio del Día (Gs. por 1 USD):', tipoCambio);
@@ -90,7 +107,7 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
     }
   };
 
-  // HELPER PARA FORMATEAR MONEDAS SINCRO (CONVERSIÓN SOLO VISUAL)
+  // HELPER PARA FORMATEAR MONEDAS
   const formatMoneda = (valUSD) => {
     if (moneda === 'Gs.') {
       const valGs = valUSD * tipoCambio;
@@ -99,44 +116,52 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(valUSD);
   };
 
-  // MATRIZ DE CÁLCULO FINANCIERO (CASCADA LANDED COST + MARGEN REAL)
+  // MATRIZ DE CÁLCULO FINANCIERO (CASCADA CON CONDICIONAL DE MODALIDAD)
   const calcularMetricasEquipo = (eq) => {
     const qty = Math.max(1, parseInt(eq.cantidad) || 1);
     const baseUnit = parseFloat(eq.costoBase) || 0;
     const baseTotal = baseUnit * qty;
+    const mod = eq.modalidad || 'FOB/EXW';
 
     // Flete Internacional
-    const montoFleteTotal = eq.tipoFlete === 'porcentaje' 
-      ? baseTotal * ((parseFloat(eq.valorFlete) || 0) / 100)
-      : (parseFloat(eq.valorFlete) || 0) * qty;
+    const fletePct = eq.valorFlete !== undefined ? eq.valorFlete : defaults.fleteBase;
+    const montoFleteTotal = mod === 'FOB/EXW' ? baseTotal * (fletePct / 100) : 0;
 
     // Seguro Internacional
-    const montoSeguroTotal = (baseTotal + montoFleteTotal) * ((parseFloat(eq.porcentajeSeguro) || 0) / 100);
+    const seguroPct = eq.porcentajeSeguro !== undefined ? eq.porcentajeSeguro : defaults.seguroBase;
+    const montoSeguroTotal = mod === 'FOB/EXW' ? (baseTotal + montoFleteTotal) * (seguroPct / 100) : 0;
 
     // Subtotal CIF
     const cifTotal = baseTotal + montoFleteTotal + montoSeguroTotal;
 
     // Nacionalización & Aranceles
-    const montoArancelTotal = cifTotal * ((parseFloat(eq.porcentajeArancel) || 0) / 100);
-    const montoDespachoTotal = cifTotal * ((parseFloat(eq.porcentajeDespacho) || 0) / 100);
+    const arancelPct = eq.porcentajeArancel !== undefined ? eq.porcentajeArancel : defaults.arancelBase;
+    const montoArancelTotal = mod !== 'Local' ? cifTotal * (arancelPct / 100) : 0;
 
-    // IVA Aduanero (Base Imponible = CIF + Arancel). 10% Fijo. No suma a costo directo (Crédito Fiscal)
+    const despachoPct = eq.porcentajeDespacho !== undefined ? eq.porcentajeDespacho : defaults.despachoBase;
+    const montoDespachoTotal = mod !== 'Local' ? cifTotal * (despachoPct / 100) : 0;
+
+    // IVA Aduanero
     const baseImponibleIVA = cifTotal + montoArancelTotal;
-    const montoIVATotal = baseImponibleIVA * 0.10;
+    const montoIVATotal = mod !== 'Local' ? baseImponibleIVA * 0.10 : 0;
 
-    // Logística Interna
+    // Logística Interna (Flete Local)
     const montoFleteLocalTotal = eq.aplicarFleteLocal ? ((parseFloat(eq.montoFleteLocal) || 0) * qty) : 0;
 
     // Gastos Financieros y Administrativos
-    const montoFinancieroTotal = cifTotal * ((parseFloat(eq.porcentajeFinanciero) || 0) / 100);
-    const montoAdminTotal = cifTotal * ((parseFloat(eq.porcentajeAdmin) || 0) / 100);
+    const finPct = eq.porcentajeFinanciero !== undefined ? eq.porcentajeFinanciero : defaults.financieroBase;
+    const montoFinancieroTotal = cifTotal * (finPct / 100);
+
+    const adminPct = eq.porcentajeAdmin !== undefined ? eq.porcentajeAdmin : defaults.adminBase;
+    const montoAdminTotal = cifTotal * (adminPct / 100);
 
     // COSTO TOTAL IMPORTACIÓN (Landed Cost DDP)
     const landedCostTotal = cifTotal + montoArancelTotal + montoDespachoTotal + montoFleteLocalTotal + montoFinancieroTotal + montoAdminTotal;
     const landedCostUnitario = landedCostTotal / qty;
 
-    // Precio de Venta (Margen Real) -> Fórmula Estricta: Precio = LandedCost / (1 - Margen)
-    const margenDecimal = Math.min(0.99, Math.max(0, (parseFloat(eq.margenPorcentaje) || 0) / 100));
+    // Precio de Venta (Margen Real)
+    const margenPct = eq.margenPorcentaje !== undefined ? eq.margenPorcentaje : defaults.margenBase;
+    const margenDecimal = Math.min(0.99, Math.max(0, margenPct / 100));
     const precioVentaTotal = landedCostTotal / (1 - margenDecimal);
     const precioVentaUnitario = precioVentaTotal / qty;
     const gananciaTotal = precioVentaTotal - landedCostTotal;
@@ -157,8 +182,22 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
       landedCostUnitario,
       precioVentaTotal,
       precioVentaUnitario,
-      gananciaTotal
+      gananciaTotal,
+      arancelPct
     };
+  };
+
+  // EDITADO INLINE EN LA TABLA (NCM y Arancel)
+  const handleUpdateInline = (id, field, value) => {
+    setEquipos(prev => prev.map(eq => {
+      if (eq.id === id) {
+        return {
+          ...eq,
+          [field]: value
+        };
+      }
+      return eq;
+    }));
   };
 
   // APERTURA DE MODAL
@@ -189,7 +228,7 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
 
   const handleSaveEquipo = () => {
     if (!formData.nombre.trim()) return alert('Por favor, ingresa el nombre del equipo.');
-    if (parseFloat(formData.costoBase) <= 0) return alert('Ingresa un costo base (FOB/EXW) válido.');
+    if (parseFloat(formData.costoBase) <= 0) return alert('Ingresa un costo base válido.');
 
     if (editingId) {
       setEquipos(prev => prev.map(item => item.id === editingId ? { ...formData } : item));
@@ -205,7 +244,70 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
     }
   };
 
-  // RESUMEN CONSOLIDADO DEL BLOQUE
+  // IMPORTACIÓN DE EXCEL (XLSX)
+  const handleImportExcel = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = evt.target.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const sheetData = XLSX.utils.sheet_to_json(worksheet);
+
+        // Validar columnas requeridas
+        const requiredCols = ['Ítem', 'Cantidad', 'Modalidad', 'Costo Base'];
+        if (sheetData.length > 0) {
+          const firstRowKeys = Object.keys(sheetData[0]);
+          const missing = requiredCols.filter(col => !firstRowKeys.includes(col));
+          if (missing.length > 0) {
+            alert(`El Excel no cumple con el formato requerido. Columnas faltantes: ${missing.join(', ')}`);
+            return;
+          }
+        } else {
+          alert('El archivo Excel está vacío.');
+          return;
+        }
+
+        const newEquipos = sheetData.map(row => {
+          let modalidad = row['Modalidad'];
+          if (!['Local', 'FOB/EXW', 'CIP'].includes(modalidad)) {
+            modalidad = 'FOB/EXW'; // Fallback
+          }
+          return {
+            id: crypto.randomUUID(),
+            nombre: row['Ítem'] || 'Equipo sin nombre',
+            cantidad: Math.max(1, parseInt(row['Cantidad']) || 1),
+            costoBase: parseFloat(row['Costo Base']) || 0,
+            modalidad,
+            ncm: row['NCM'] ? String(row['NCM']) : '8504.23.00',
+            porcentajeArancel: row['Arancel %'] !== undefined ? parseFloat(row['Arancel %']) : undefined,
+            valorFlete: undefined,
+            porcentajeSeguro: undefined,
+            porcentajeDespacho: undefined,
+            aplicarFleteLocal: false,
+            montoFleteLocal: 1500,
+            porcentajeFinanciero: undefined,
+            porcentajeAdmin: undefined,
+            margenPorcentaje: undefined
+          };
+        });
+
+        setEquipos(prev => [...prev, ...newEquipos]);
+        alert(`✅ Se importaron ${newEquipos.length} equipos desde el archivo Excel.`);
+      } catch (err) {
+        console.error(err);
+        alert('Ocurrió un error al procesar el archivo Excel.');
+      }
+    };
+    reader.readAsBinaryString(file);
+    // Limpiar input
+    e.target.value = null;
+  };
+
+  // RESUMEN CONSOLIDADO
   const resTotales = equipos.reduce((acc, eq) => {
     const m = calcularMetricasEquipo(eq);
     acc.cif += m.cifTotal;
@@ -216,7 +318,7 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
     return acc;
   }, { cif: 0, landed: 0, precio: 0, ganancia: 0, iva: 0 });
 
-  // EMISOR DE ESTADO GLOBAL PARA EL DASHBOARD (State Lifting)
+  // EMISOR DE ESTADO GLOBAL
   useEffect(() => {
     if (setTotalProcura) {
       setTotalProcura(resTotales.precio);
@@ -226,15 +328,94 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
     }
   }, [resTotales.precio, equipos, setTotalProcura, setDetalleProcura]);
 
-  // Sincronizar moneda de visualización con monedaTrabajo del Bloque 0
+  // SINCRONIZACIÓN DE MONEDA CON BLOQUE 0
   useEffect(() => {
     setMoneda(monedaTrabajo === 'USD' ? 'USD' : 'Gs.');
   }, [monedaTrabajo]);
 
+  // COLOR DEL BORDE SEGÚN MODALIDAD
+  const getBordeColor = (modalidad) => {
+    if (modalidad === 'Local') return '4px solid #10b981'; // Verde
+    if (modalidad === 'CIP') return '4px solid #8b5cf6'; // Morado
+    return '4px solid #3b82f6'; // Azul FOB
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
       
-      {/* PANEL SUPERIOR CON CONTROLES Y SWAP DE MONEDA */}
+      {/* FASE 1: PANEL GLOBAL "SETEA Y OLVIDA" */}
+      <div className="odoo-card" style={{ background: '#ffffff', borderLeft: '4px solid #475569', padding: '16px' }}>
+        <h3 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', fontWeight: 700, color: '#475569', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          ⚙️ Panel de Variables Globales ("Setea y Olvida")
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label style={{ fontSize: '0.78rem', color: '#64748b' }}>% Flete Base</label>
+            <input 
+              type="number" 
+              value={defaults.fleteBase} 
+              onChange={e => setDefaults({...defaults, fleteBase: parseFloat(e.target.value) || 0})}
+              style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
+            />
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label style={{ fontSize: '0.78rem', color: '#64748b' }}>% Seguro Base</label>
+            <input 
+              type="number" 
+              value={defaults.seguroBase} 
+              onChange={e => setDefaults({...defaults, seguroBase: parseFloat(e.target.value) || 0})}
+              style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
+            />
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label style={{ fontSize: '0.78rem', color: '#64748b' }}>% Despacho</label>
+            <input 
+              type="number" 
+              value={defaults.despachoBase} 
+              onChange={e => setDefaults({...defaults, despachoBase: parseFloat(e.target.value) || 0})}
+              style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
+            />
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label style={{ fontSize: '0.78rem', color: '#64748b' }}>% Financiero</label>
+            <input 
+              type="number" 
+              value={defaults.financieroBase} 
+              onChange={e => setDefaults({...defaults, financieroBase: parseFloat(e.target.value) || 0})}
+              style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
+            />
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label style={{ fontSize: '0.78rem', color: '#64748b' }}>% Administrativo</label>
+            <input 
+              type="number" 
+              value={defaults.adminBase} 
+              onChange={e => setDefaults({...defaults, adminBase: parseFloat(e.target.value) || 0})}
+              style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
+            />
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label style={{ fontSize: '0.78rem', color: '#64748b' }}>Arancel Defecto (%)</label>
+            <input 
+              type="number" 
+              value={defaults.arancelBase} 
+              onChange={e => setDefaults({...defaults, arancelBase: parseFloat(e.target.value) || 0})}
+              style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
+            />
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label style={{ fontSize: '0.78rem', color: '#64748b' }}>Margen Global (%)</label>
+            <input 
+              type="number" 
+              value={defaults.margenBase} 
+              onChange={e => setDefaults({...defaults, margenBase: parseFloat(e.target.value) || 0})}
+              style={{ padding: '6px 10px', fontSize: '0.85rem', fontWeight: 'bold', color: '#2563eb' }} 
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* CONTROLES DEL PANEL DE PROCURA */}
       <div className="odoo-card" style={{ background: '#ffffff', borderLeft: '4px solid #2563eb' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
           
@@ -243,16 +424,16 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
               <Globe color="#2563eb" size={28} />
             </div>
             <div>
-              <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#0f172a' }}>Gestión de Procura & Landed Cost (Importación EPC)</h2>
+              <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#0f172a' }}>Planilla de Importación y Procura DDP</h2>
               <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>
-                Costeo de Suministros FOB/CIF, Aranceles Nacionalización, Gastos Locales y Rentabilidad DDP
+                Gestión DDP integrada con soporte para compras Locales, FOB y CIP
               </p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             
-            {/* TOGGLE MONEDA CON FEEDBACK DE TIPO DE CAMBIO */}
+            {/* TOGGLE MONEDA */}
             <div style={{ 
               display: 'flex', 
               alignItems: 'center', 
@@ -262,7 +443,7 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
               borderRadius: '8px', 
               border: '1px solid #cbd5e1' 
             }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>Visualización:</span>
+              <span style={{ fontSize: '0.85rem', color: '#475569' }}>Visualizar:</span>
               <button
                 onClick={handleToggleMoneda}
                 style={{
@@ -276,19 +457,37 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                  gap: '6px'
                 }}
               >
                 <ArrowRightLeft size={14} /> {moneda}
               </button>
-              {moneda === 'Gs.' && (
-                <span style={{ fontSize: '0.8rem', color: '#059669', fontWeight: 700 }}>
-                  (T.C: {tipoCambio.toLocaleString('es-PY')} Gs/$)
-                </span>
-              )}
             </div>
 
+            {/* IMPORTADOR EXCEL */}
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: '#f1f5f9',
+              border: '1px solid #cbd5e1',
+              color: '#334155',
+              padding: '10px 16px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '0.9rem'
+            }}>
+              <Upload size={16} /> Importar XLSX
+              <input 
+                type="file" 
+                accept=".xlsx, .xls" 
+                onChange={handleImportExcel} 
+                style={{ display: 'none' }} 
+              />
+            </label>
+
+            {/* GUARDAR PROGRESO */}
             <button 
               className="primary-btn" 
               onClick={onGuardar}
@@ -298,179 +497,178 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
               💾 {isSaving ? 'Guardando...' : 'Guardar Progreso'}
             </button>
 
+            {/* AGREGAR EQUIPO */}
             <button 
               className="primary-btn" 
               onClick={openModalNew}
               style={{ width: 'auto', padding: '10px 20px', background: '#2563eb', display: 'flex', alignItems: 'center', gap: '8px' }}
             >
-              <Plus size={18} /> Agregar Equipo Procura
+              <Plus size={18} /> Agregar Equipo
             </button>
 
           </div>
-
         </div>
       </div>
 
-      {/* TARJETAS DE EQUIPOS (DESGLOSE EN 4 COLUMNAS POR CADA ÍTEM) */}
-      {equipos.length === 0 ? (
-        <div className="odoo-card" style={{ padding: '50px 20px', textAlign: 'center', background: '#ffffff', border: '2px dashed #e2e8f0' }}>
-          <Package size={40} color="#94a3b8" style={{ marginBottom: '12px' }} />
-          <h3 style={{ color: '#334155', margin: '0 0 8px 0' }}>Planilla de Procura Vacía</h3>
-          <p style={{ color: '#64748b', fontSize: '0.9rem', margin: '0 0 20px 0' }}>Haz clic en "Agregar Equipo Procura" para calcular el costo de importación DDP.</p>
-          <button className="primary-btn" onClick={openModalNew} style={{ width: 'auto', margin: '0 auto', background: '#2563eb' }}>
-            <Plus size={18} /> Añadir Primer Equipo
-          </button>
-        </div>
-      ) : (
-        equipos.map((eq) => {
-          const m = calcularMetricasEquipo(eq);
-          return (
-            <div 
-              key={eq.id} 
-              className="odoo-card" 
-              style={{ 
-                background: '#ffffff', 
-                padding: '20px', 
-                borderLeft: '4px solid #10b981',
-                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)'
-              }}
-            >
-              
-              {/* HEADER TARJETA EQUIPO */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ background: '#d1fae5', color: '#065f46', fontWeight: 700, fontSize: '0.85rem', padding: '4px 10px', borderRadius: '6px' }}>
-                    {eq.cantidad}x Cant.
-                  </span>
-                  <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#0f172a' }}>{eq.nombre}</h3>
-                  <span style={{ fontSize: '0.75rem', background: '#f1f5f9', color: '#475569', padding: '2px 8px', borderRadius: '4px' }}>
-                    NCM: {eq.ncm}
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button 
-                    onClick={() => openModalEdit(eq)} 
-                    style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600 }}
+      {/* FASE 3: DATAGRID (TABLA DE EDICIÓN DIRECTA) */}
+      <div className="odoo-card" style={{ padding: '0', overflowX: 'auto', background: '#ffffff' }}>
+        {equipos.length === 0 ? (
+          <div style={{ padding: '50px 20px', textAlign: 'center' }}>
+            <Package size={40} color="#94a3b8" style={{ marginBottom: '12px' }} />
+            <h3 style={{ color: '#334155', margin: '0 0 8px 0' }}>Planilla de Procura Vacía</h3>
+            <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>Agrega equipos manualmente o importa una planilla Excel (.xlsx).</p>
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '800px' }}>
+            <thead>
+              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: '#475569', fontWeight: 700 }}>Ítem</th>
+                <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: '#475569', fontWeight: 700, width: '90px', textAlign: 'center' }}>Cantidad</th>
+                <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: '#475569', fontWeight: 700, width: '120px', textAlign: 'center' }}>Modalidad</th>
+                <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: '#475569', fontWeight: 700, textAlign: 'right' }}>Costo Base Unit (USD)</th>
+                <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: '#475569', fontWeight: 700, width: '130px', textAlign: 'center' }}>NCM (Editable)</th>
+                <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: '#475569', fontWeight: 700, width: '110px', textAlign: 'center' }}>Arancel % (Editable)</th>
+                <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: '#475569', fontWeight: 700, textAlign: 'right' }}>Costo DDP Unitario</th>
+                <th style={{ padding: '14px 16px', fontSize: '0.85rem', color: '#475569', fontWeight: 700, textAlign: 'right' }}>Precio Venta Lote</th>
+                <th style={{ padding: '14px 16px', width: '100px', textAlign: 'center' }}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {equipos.map((eq) => {
+                const m = calcularMetricasEquipo(eq);
+                return (
+                  <tr 
+                    key={eq.id} 
+                    style={{ 
+                      borderBottom: '1px solid #f1f5f9', 
+                      transition: 'background 0.15s'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
-                    <Edit2 size={15} color="#2563eb" /> Editar Costos
-                  </button>
-                  <button 
-                    onClick={() => handleRemoveEquipo(eq.id)} 
-                    style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#ef4444', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer' }}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
+                    {/* INDICADOR LATERAL SEGÚN MODALIDAD */}
+                    <td style={{ padding: '14px 16px', borderLeft: getBordeColor(eq.modalidad), fontWeight: 600, color: '#0f172a' }}>
+                      {eq.nombre}
+                    </td>
+                    <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                      <span style={{ background: '#f1f5f9', padding: '4px 10px', borderRadius: '6px', fontWeight: 700, fontSize: '0.85rem' }}>
+                        {eq.cantidad}x
+                      </span>
+                    </td>
+                    <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                      <span style={{ 
+                        background: eq.modalidad === 'Local' ? '#d1fae5' : eq.modalidad === 'CIP' ? '#f3e8ff' : '#eff6ff',
+                        color: eq.modalidad === 'Local' ? '#065f46' : eq.modalidad === 'CIP' ? '#6b21a8' : '#1e40af',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        padding: '4px 10px',
+                        borderRadius: '12px'
+                      }}>
+                        {eq.modalidad}
+                      </span>
+                    </td>
+                    <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: 600 }}>
+                      {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(eq.costoBase)}
+                    </td>
+                    
+                    {/* EDICIÓN INLINE: NCM */}
+                    <td style={{ padding: '8px 16px', textAlign: 'center' }}>
+                      <input 
+                        type="text" 
+                        value={eq.ncm} 
+                        onChange={(e) => handleUpdateInline(eq.id, 'ncm', e.target.value)}
+                        style={{
+                          width: '100%',
+                          textAlign: 'center',
+                          border: '1px solid transparent',
+                          background: 'transparent',
+                          padding: '4px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem'
+                        }}
+                        onFocus={(e) => {
+                          e.target.style.background = '#ffffff';
+                          e.target.style.borderColor = '#cbd5e1';
+                        }}
+                        onBlur={(e) => {
+                          e.target.style.background = 'transparent';
+                          e.target.style.borderColor = 'transparent';
+                        }}
+                      />
+                    </td>
 
-              {/* MATRIZ DE 4 COLUMNAS DE CÁLCULO FINANCIERO */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '15px' }}>
-                
-                {/* COLUMNA 1: DATOS BASE & LOGÍSTICA INT. */}
-                <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', color: '#1e40af', fontWeight: 700, fontSize: '0.85rem' }}>
-                    <Ship size={16} /> 1. Datos Base & Flete/Seguro
-                  </div>
-                  <div style={{ fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '6px', color: '#334155' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Costo FOB (Unit):</span>
-                      <span style={{ fontWeight: 600 }}>{formatMoneda(eq.costoBase)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Flete Int. ({eq.tipoFlete === 'porcentaje' ? `${eq.valorFlete}%` : 'Fijo'}):</span>
-                      <span>{formatMoneda(m.montoFleteTotal / m.qty)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Seguro Int. ({eq.porcentajeSeguro}%):</span>
-                      <span>{formatMoneda(m.montoSeguroTotal / m.qty)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px dashed #cbd5e1', fontWeight: 700, color: '#0f172a' }}>
-                      <span>Subtotal CIF (Unit):</span>
-                      <span style={{ color: '#2563eb' }}>{formatMoneda(m.cifTotal / m.qty)}</span>
-                    </div>
-                  </div>
-                </div>
+                    {/* EDICIÓN INLINE: ARANCEL % */}
+                    <td style={{ padding: '8px 16px', textAlign: 'center' }}>
+                      <input 
+                        type="number" 
+                        value={eq.porcentajeArancel !== undefined ? eq.porcentajeArancel : ''} 
+                        placeholder={defaults.arancelBase}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                          handleUpdateInline(eq.id, 'porcentajeArancel', val);
+                        }}
+                        style={{
+                          width: '100%',
+                          textAlign: 'center',
+                          border: '1px solid transparent',
+                          background: 'transparent',
+                          padding: '4px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem',
+                          fontWeight: eq.porcentajeArancel !== undefined ? 'bold' : 'normal',
+                          color: eq.porcentajeArancel !== undefined ? '#2563eb' : 'inherit'
+                        }}
+                        onFocus={(e) => {
+                          e.target.style.background = '#ffffff';
+                          e.target.style.borderColor = '#cbd5e1';
+                        }}
+                        onBlur={(e) => {
+                          e.target.style.background = 'transparent';
+                          e.target.style.borderColor = 'transparent';
+                        }}
+                      />
+                    </td>
 
-                {/* COLUMNA 2: NACIONALIZACIÓN & ARANCELES */}
-                <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', color: '#b45309', fontWeight: 700, fontSize: '0.85rem' }}>
-                    <Building size={16} /> 2. Nacionalización Aduana
-                  </div>
-                  <div style={{ fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '6px', color: '#334155' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Arancel Aduanero ({eq.porcentajeArancel}%):</span>
-                      <span>{formatMoneda(m.montoArancelTotal / m.qty)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Gastos Despacho ({eq.porcentajeDespacho}%):</span>
-                      <span>{formatMoneda(m.montoDespachoTotal / m.qty)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
-                      <span>IVA Aduanero (10% Créd. Fiscal):</span>
-                      <span style={{ fontStyle: 'italic' }}>{formatMoneda(m.montoIVATotal / m.qty)}</span>
-                    </div>
-                  </div>
-                </div>
+                    <td style={{ padding: '14px 16px', textAlign: 'right', color: '#475569', fontWeight: 500 }}>
+                      {formatMoneda(m.landedCostUnitario)}
+                    </td>
+                    <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: 800, color: '#1e3a8a' }}>
+                      {formatMoneda(m.precioVentaTotal)}
+                    </td>
+                    <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                        <button 
+                          onClick={() => openModalEdit(eq)} 
+                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px' }}
+                          title="Ficha Completa / Costos Fijos"
+                        >
+                          <Edit2 size={16} color="#2563eb" />
+                        </button>
+                        <button 
+                          onClick={() => handleRemoveEquipo(eq.id)} 
+                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px' }}
+                          title="Quitar"
+                        >
+                          <Trash2 size={16} color="#ef4444" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
 
-                {/* COLUMNA 3: COSTOS LOCALES Y FINANCIEROS */}
-                <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', color: '#6b21a8', fontWeight: 700, fontSize: '0.85rem' }}>
-                    <Truck size={16} /> 3. Costos Locales & Admin
-                  </div>
-                  <div style={{ fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '6px', color: '#334155' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Flete Local / Destino:</span>
-                      <span>{eq.aplicarFleteLocal ? formatMoneda(eq.montoFleteLocal) : 'N/A (0)'}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Financiero ({eq.porcentajeFinanciero}%):</span>
-                      <span>{formatMoneda(m.montoFinancieroTotal / m.qty)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Gastos Admin ({eq.porcentajeAdmin}%):</span>
-                      <span>{formatMoneda(m.montoAdminTotal / m.qty)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* COLUMNA 4: RESULTADO COMERCIAL (LANDED COST & PRECIO DE VENTA) */}
-                <div style={{ background: '#eff6ff', padding: '14px', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', color: '#1e40af', fontWeight: 700, fontSize: '0.85rem' }}>
-                    <TrendingUp size={16} /> 4. Resultado Comercial DDP
-                  </div>
-                  <div style={{ fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#334155' }}>
-                      <span>Landed Cost Unitario:</span>
-                      <span style={{ fontWeight: 700 }}>{formatMoneda(m.landedCostUnitario)}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#059669', fontWeight: 600 }}>
-                      <span>Margen Aplicado:</span>
-                      <span>{eq.margenPorcentaje}% Real</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px solid #93c5fd', fontSize: '0.95rem', fontWeight: 800, color: '#1e3a8a' }}>
-                      <span>Precio Venta Unit:</span>
-                      <span>{formatMoneda(m.precioVentaUnitario)}</span>
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: '#2563eb', textAlign: 'right', fontWeight: 600 }}>
-                      Total Lote ({m.qty}x): {formatMoneda(m.precioVentaTotal)}
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-
-            </div>
-          );
-        })
-      )}
-
-      {/* TARJETA RESUMEN CONSOLIDADO EPC PROCURA */}
+      {/* TARJETA RESUMEN CONSOLIDADO */}
       {equipos.length > 0 && (
         <div className="odoo-card" style={{ background: '#0f172a', color: '#ffffff', border: 'none' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
             <div>
-              <span style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Total CIF Importaciones</span>
+              <span style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Total CIF Planilla</span>
               <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#38bdf8' }}>{formatMoneda(resTotales.cif)}</span>
             </div>
             <div>
@@ -478,7 +676,7 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
               <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#f1f5f9' }}>{formatMoneda(resTotales.landed)}</span>
             </div>
             <div>
-              <span style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Ganancia Bruta Procura</span>
+              <span style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Ganancia Estimada Procura</span>
               <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#34d399' }}>{formatMoneda(resTotales.ganancia)}</span>
             </div>
             <div>
@@ -489,28 +687,43 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
         </div>
       )}
 
-      {/* MODAL DE EDICIÓN / ADICIÓN DE EQUIPO */}
+      {/* MODAL DE EDICIÓN / ADICIÓN (CON RENDERIZADO CONDICIONAL ESTRICTO) */}
       {showModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)', padding: '20px' }}>
-          <div className="odoo-card modal-content" style={{ width: '800px', maxHeight: '90vh', overflowY: 'auto', background: '#ffffff' }}>
+          <div className="odoo-card modal-content" style={{ width: '750px', maxHeight: '90vh', overflowY: 'auto', background: '#ffffff' }}>
             
             <h2 style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px', color: '#0f172a' }}>
-              <Calculator size={24} color="#2563eb" /> {editingId ? 'Editar Formulación de Importación' : 'Agregar Equipo a Procura'}
+              <Calculator size={24} color="#2563eb" /> {editingId ? 'Ficha de Costos: Editar Equipo' : 'Formulario de Procura: Agregar Equipo'}
             </h2>
 
-            {/* SECCIÓN 1: IDENTIFICACIÓN & FOB */}
+            {/* SECCIÓN 1: IDENTIFICACIÓN & MODALIDAD */}
             <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '15px' }}>
-              <h4 style={{ margin: '0 0 12px 0', color: '#1e40af', fontSize: '0.9rem' }}>1. Identificación y Costo Base</h4>
+              <h4 style={{ margin: '0 0 12px 0', color: '#1e40af', fontSize: '0.9rem' }}>1. Configuración Básica del Suministro</h4>
               <div className="config-grid" style={{ marginBottom: '12px' }}>
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label>Nombre del Equipo / Suministro</label>
+                  <label>Nombre del Equipo</label>
                   <input 
                     type="text" 
-                    placeholder="Ej: Inversor Centralizado 2.5 MW" 
+                    placeholder="Ej: Transformador 80MVA" 
                     value={formData.nombre} 
                     onChange={e => setFormData({ ...formData, nombre: e.target.value })} 
                   />
                 </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label>Modalidad de Compra</label>
+                  <select 
+                    value={formData.modalidad} 
+                    onChange={e => setFormData({ ...formData, modalidad: e.target.value })}
+                    style={{ fontWeight: 'bold' }}
+                  >
+                    <option value="FOB/EXW">FOB / EXW (Importación Completa)</option>
+                    <option value="CIP">CIP (Llega a Aduana Destino)</option>
+                    <option value="Local">Compra Local (Costo Directo sin Aduanas)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="config-grid">
                 <div className="form-group" style={{ margin: 0 }}>
                   <label>Cantidad</label>
                   <input 
@@ -520,21 +733,8 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
                     onChange={e => setFormData({ ...formData, cantidad: Math.max(1, parseInt(e.target.value) || 1) })} 
                   />
                 </div>
-              </div>
-
-              <div className="config-grid">
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label>Autocompletar NCM (Arancel Aduanero)</label>
-                  <select value={formData.ncm} onChange={e => handleSelectNCM(e.target.value)}>
-                    {diccionarioNCM.map(item => (
-                      <option key={item.ncm} value={item.ncm}>
-                        {item.ncm} - {item.desc} ({item.arancel}%)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label>Costo Base Unitario (USD FOB/EXW)</label>
+                  <label>Costo Base Unitario (USD FOB/EXW/Local)</label>
                   <input 
                     type="number" 
                     min="0" 
@@ -546,64 +746,82 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
               </div>
             </div>
 
-            {/* SECCIÓN 2: LOGÍSTICA INTERNACIONAL */}
+            {/* FASE 2: RENDERIZADO CONDICIONAL ESTRICTO */}
+            
+            {/* LOGÍSTICA INTERNACIONAL (Oculto totalmente en Local y CIP) */}
+            {formData.modalidad === 'FOB/EXW' && (
+              <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '15px' }}>
+                <h4 style={{ margin: '0 0 12px 0', color: '#1e40af', fontSize: '0.9rem' }}>2. Logística Internacional & Seguro CIF</h4>
+                <div className="config-grid">
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Flete Internacional Especial (% sobre FOB)</label>
+                    <input 
+                      type="number" 
+                      min="0" 
+                      placeholder={`Usa global (${defaults.fleteBase}%)`}
+                      value={formData.valorFlete !== undefined ? formData.valorFlete : ''} 
+                      onChange={e => setFormData({ ...formData, valorFlete: e.target.value === '' ? undefined : parseFloat(e.target.value) })} 
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Seguro Internacional Especial (%)</label>
+                    <input 
+                      type="number" 
+                      min="0" 
+                      placeholder={`Usa global (${defaults.seguroBase}%)`}
+                      value={formData.porcentajeSeguro !== undefined ? formData.porcentajeSeguro : ''} 
+                      onChange={e => setFormData({ ...formData, porcentajeSeguro: e.target.value === '' ? undefined : parseFloat(e.target.value) })} 
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* NACIONALIZACIÓN (Oculto totalmente en Local, visible en CIP y FOB) */}
+            {formData.modalidad !== 'Local' && (
+              <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '15px' }}>
+                <h4 style={{ margin: '0 0 12px 0', color: '#1e40af', fontSize: '0.9rem' }}>{formData.modalidad === 'CIP' ? '2. Nacionalización Aduanera DDP' : '3. Nacionalización Aduanera DDP'}</h4>
+                
+                <div className="config-grid" style={{ marginBottom: '12px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Autocompletar NCM</label>
+                    <select value={formData.ncm} onChange={e => handleSelectNCM(e.target.value)}>
+                      {diccionarioNCM.map(item => (
+                        <option key={item.ncm} value={item.ncm}>
+                          {item.ncm} - {item.desc} ({item.arancel}%)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Arancel Específico (% sobre CIF)</label>
+                    <input 
+                      type="number" 
+                      min="0" 
+                      placeholder={`Usa global o NCM (${defaults.arancelBase}%)`}
+                      value={formData.porcentajeArancel !== undefined ? formData.porcentajeArancel : ''} 
+                      onChange={e => setFormData({ ...formData, porcentajeArancel: e.target.value === '' ? undefined : parseFloat(e.target.value) })} 
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label>Gastos de Despachante & Puerto Especial (%)</label>
+                  <input 
+                    type="number" 
+                    min="0" 
+                    placeholder={`Usa global (${defaults.despachoBase}%)`}
+                    value={formData.porcentajeDespacho !== undefined ? formData.porcentajeDespacho : ''} 
+                    onChange={e => setFormData({ ...formData, porcentajeDespacho: e.target.value === '' ? undefined : parseFloat(e.target.value) })} 
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* SECCIÓN FINAL: LOGÍSTICA INTERNA Y MARGEN (Siempre visible) */}
             <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '15px' }}>
-              <h4 style={{ margin: '0 0 12px 0', color: '#1e40af', fontSize: '0.9rem' }}>2. Logística Internacional & Seguro CIF</h4>
-              <div className="config-grid" style={{ marginBottom: '12px' }}>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label>Modalidad de Flete</label>
-                  <select value={formData.tipoFlete} onChange={e => setFormData({ ...formData, tipoFlete: e.target.value })}>
-                    <option value="porcentaje">Porcentaje (%) sobre FOB</option>
-                    <option value="monto">Monto Fijo (USD Unitario)</option>
-                  </select>
-                </div>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label>{formData.tipoFlete === 'porcentaje' ? 'Porcentaje de Flete (%)' : 'Monto Flete USD (Unit)'}</label>
-                  <input 
-                    type="number" 
-                    min="0" 
-                    value={formData.valorFlete} 
-                    onChange={e => setFormData({ ...formData, valorFlete: parseFloat(e.target.value) || 0 })} 
-                  />
-                </div>
-              </div>
-
-              <div className="form-group" style={{ margin: 0 }}>
-                <label>Seguro Internacional (%) sobre (FOB + Flete)</label>
-                <input 
-                  type="number" 
-                  min="0" 
-                  step="0.5" 
-                  value={formData.porcentajeSeguro} 
-                  onChange={e => setFormData({ ...formData, porcentajeSeguro: parseFloat(e.target.value) || 0 })} 
-                />
-              </div>
-            </div>
-
-            {/* SECCIÓN 3: NACIONALIZACIÓN & COSTOS LOCALES */}
-            <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '15px' }}>
-              <h4 style={{ margin: '0 0 12px 0', color: '#1e40af', fontSize: '0.9rem' }}>3. Nacionalización & Gastos Locales</h4>
-              <div className="config-grid" style={{ marginBottom: '12px' }}>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label>Arancel Aduanero (% sobre CIF)</label>
-                  <input 
-                    type="number" 
-                    min="0" 
-                    value={formData.porcentajeArancel} 
-                    onChange={e => setFormData({ ...formData, porcentajeArancel: parseFloat(e.target.value) || 0 })} 
-                  />
-                </div>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label>Gastos Despachante y Puerto (% CIF)</label>
-                  <input 
-                    type="number" 
-                    min="0" 
-                    value={formData.porcentajeDespacho} 
-                    onChange={e => setFormData({ ...formData, porcentajeDespacho: parseFloat(e.target.value) || 0 })} 
-                  />
-                </div>
-              </div>
-
+              <h4 style={{ margin: '0 0 12px 0', color: '#1e40af', fontSize: '0.9rem' }}>Gastos Locales & Rentabilidad DDP</h4>
+              
               <div style={{ marginBottom: '12px', background: '#ffffff', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 600, color: '#334155', margin: 0 }}>
                   <input 
@@ -612,11 +830,11 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
                     onChange={e => setFormData({ ...formData, aplicarFleteLocal: e.target.checked })} 
                     style={{ width: 'auto', transform: 'scale(1.2)' }}
                   />
-                  ¿Aplicar Flete Local Interno hasta la Obra?
+                  ¿Aplicar flete local interno hasta obra?
                 </label>
                 {formData.aplicarFleteLocal && (
                   <div style={{ marginTop: '10px' }}>
-                    <label style={{ fontSize: '0.85rem', color: '#64748b' }}>Monto Flete Local Estimado (USD Unitario)</label>
+                    <label style={{ fontSize: '0.85rem', color: '#64748b' }}>Costo Flete Local Estimado (USD Unitario)</label>
                     <input 
                       type="number" 
                       min="0" 
@@ -629,42 +847,36 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
 
               <div className="config-grid">
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label>Gastos Financieros (% CIF)</label>
+                  <label>Gastos Financieros Específicos (% CIF)</label>
                   <input 
                     type="number" 
-                    min="0" 
-                    value={formData.porcentajeFinanciero} 
-                    onChange={e => setFormData({ ...formData, porcentajeFinanciero: parseFloat(e.target.value) || 0 })} 
+                    placeholder={`Usa global (${defaults.financieroBase}%)`}
+                    value={formData.porcentajeFinanciero !== undefined ? formData.porcentajeFinanciero : ''}
+                    onChange={e => setFormData({ ...formData, porcentajeFinanciero: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                   />
                 </div>
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label>Gastos Administrativos (% CIF)</label>
+                  <label>Gastos Administrativos Específicos (% CIF)</label>
                   <input 
                     type="number" 
-                    min="0" 
-                    value={formData.porcentajeAdmin} 
-                    onChange={e => setFormData({ ...formData, porcentajeAdmin: parseFloat(e.target.value) || 0 })} 
+                    placeholder={`Usa global (${defaults.adminBase}%)`}
+                    value={formData.porcentajeAdmin !== undefined ? formData.porcentajeAdmin : ''}
+                    onChange={e => setFormData({ ...formData, porcentajeAdmin: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                   />
                 </div>
               </div>
-            </div>
 
-            {/* SECCIÓN 4: MARGEN REAL & RESULTADO */}
-            <div style={{ background: '#eff6ff', padding: '15px', borderRadius: '8px', border: '1px solid #bfdbfe', marginBottom: '20px' }}>
-              <h4 style={{ margin: '0 0 12px 0', color: '#1e40af', fontSize: '0.9rem' }}>4. Margen Comercial y Resultado DDP</h4>
-              <div className="form-group" style={{ margin: 0 }}>
-                <label style={{ color: '#1e40af', fontWeight: 700 }}>Margen de Ganancia Comercial Real (%)</label>
+              <div className="form-group" style={{ margin: '12px 0 0 0' }}>
+                <label style={{ color: '#2563eb', fontWeight: 700 }}>Margen de Ganancia Específico (%)</label>
                 <input 
                   type="number" 
                   min="0" 
                   max="99" 
-                  value={formData.margenPorcentaje} 
-                  onChange={e => setFormData({ ...formData, margenPorcentaje: parseFloat(e.target.value) || 0 })} 
-                  style={{ borderColor: '#3b82f6', background: '#ffffff', fontWeight: 700, color: '#1e3a8a' }}
+                  placeholder={`Usa global (${defaults.margenBase}%)`}
+                  value={formData.margenPorcentaje !== undefined ? formData.margenPorcentaje : ''} 
+                  onChange={e => setFormData({ ...formData, margenPorcentaje: e.target.value === '' ? undefined : parseFloat(e.target.value) })} 
+                  style={{ borderColor: '#3b82f6', background: '#ffffff', fontWeight: 700 }}
                 />
-                <span style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                  Fórmula aplicada: Precio = LandedCost / (1 - Margen)
-                </span>
               </div>
             </div>
 
@@ -674,7 +886,7 @@ export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, ti
                 Cancelar
               </button>
               <button className="primary-btn" onClick={handleSaveEquipo} style={{ width: 'auto', padding: '10px 24px', background: '#2563eb' }}>
-                {editingId ? 'Guardar Cambios' : 'Agregar a Procura'}
+                {editingId ? 'Guardar Cambios' : 'Añadir Equipo'}
               </button>
             </div>
 
