@@ -328,7 +328,13 @@ function Bloque2_SSTT({ setTotalServicios, setDetalleServicios }) {
     logisticsOverrides: logisticsOverrides
   };
 
-  const resultadosCalculados = calcularCotizacionActiva({ ...cotizacionGlobal, equiposCotizados: structuredClone(cart), alquileres: structuredClone(alquileres) });
+  const resultadosCalculados = useMemo(() => {
+    return calcularCotizacionActiva({
+      ...cotizacionGlobal,
+      equiposCotizados: structuredClone(cart),
+      alquileres: structuredClone(alquileres)
+    });
+  }, [cliente, nombreObra, distanciaKm, diasPermitidosCorte, gastosImprevistos, margenImprevistosPorcentaje, logisticsOverrides, cart, alquileres]);
 
   const totalCostoTecnico = resultadosCalculados?.Precio_Venta_Final || 0;
 

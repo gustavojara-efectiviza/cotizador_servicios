@@ -6,9 +6,10 @@ export default function Bloque3_Resumen({
   totalProcura = 0, 
   totalServicios = 0, 
   detalleProcura = [], 
-  detalleServicios = [] 
+  detalleServicios = [],
+  tipoCambio = 7500
 }) {
-  const granTotal = (Number(totalProcura) || 0) + (Number(totalServicios) || 0);
+  const granTotal = (Number(totalProcura) * tipoCambio || 0) + (Number(totalServicios) || 0);
 
   const formatMoneda = (val) => {
     return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(val);
@@ -46,17 +47,17 @@ export default function Bloque3_Resumen({
       const margen = Math.min(0.99, (eq.margenPorcentaje || 0) / 100);
       const precioVenta = landedCost / (1 - margen);
       
-      // Convertir a Gs (T.C 7500)
-      const tc = 7500;
+      // Convertir a Gs (T.C tipoCambio)
+      const tc = tipoCambio || 7500;
       costoTotalProcura += landedCost * tc;
       precioTotalProcura += precioVenta * tc;
       gananciaTotalProcura += (precioVenta - landedCost) * tc;
     });
 
     if (precioTotalProcura === 0 && totalProcura > 0) {
-      precioTotalProcura = totalProcura;
-      costoTotalProcura = totalProcura * 0.70;
-      gananciaTotalProcura = totalProcura * 0.30;
+      precioTotalProcura = totalProcura * tc;
+      costoTotalProcura = totalProcura * tc * 0.70;
+      gananciaTotalProcura = totalProcura * tc * 0.30;
     }
 
     const margenProcuraPct = precioTotalProcura > 0 ? (gananciaTotalProcura / precioTotalProcura) * 100 : 0;
@@ -284,7 +285,7 @@ export default function Bloque3_Resumen({
             </div>
           </div>
           <h3 style={{ margin: '0 0 8px 0', fontSize: '1.6rem', fontWeight: 800, color: '#0f172a' }}>
-            {formatMoneda(totalProcura)}
+            {formatMoneda(totalProcura * tipoCambio)}
           </h3>
           <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>
             {detalleProcura.length} equipo(s) auditables en planilla de importación.

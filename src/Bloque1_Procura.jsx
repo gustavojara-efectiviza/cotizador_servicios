@@ -29,10 +29,9 @@ const diccionarioNCM = [
   { ncm: '8504.34.00', desc: 'Transformadores de medida y auxiliares', arancel: 6 }
 ];
 
-export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura }) {
+export default function Bloque1_Procura({ setTotalProcura, setDetalleProcura, tipoCambio = 7500, setTipoCambio }) {
   // ESTADO GLOBAL DE MONEDA (Única fuente de la verdad en USD)
   const [moneda, setMoneda] = useState('USD'); // 'USD' vs 'Gs.'
-  const [tipoCambio, setTipoCambio] = useState(7500); // 1 USD = 7500 Gs. por defecto
 
   // LISTA DE EQUIPOS A IMPORTAR
   const [equipos, setEquipos] = useState([

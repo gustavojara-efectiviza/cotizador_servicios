@@ -31,6 +31,7 @@ export default function EPCDashboard() {
   const [totalServicios, setTotalServicios] = useState(0);
   const [detalleProcura, setDetalleProcura] = useState([]);
   const [detalleServicios, setDetalleServicios] = useState([]);
+  const [tipoCambio, setTipoCambio] = useState(7500);
 
   // Nombres descriptivos para la UI
   const perfiles = {
@@ -235,7 +236,12 @@ export default function EPCDashboard() {
         {/* BLOQUE 1: PROCURA & LANDED COST (COMPONENTIZADO) */}
         {activeBlock === 1 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <Bloque1_Procura setTotalProcura={setTotalProcura} setDetalleProcura={setDetalleProcura} />
+            <Bloque1_Procura 
+              setTotalProcura={setTotalProcura} 
+              setDetalleProcura={setDetalleProcura} 
+              tipoCambio={tipoCambio} 
+              setTipoCambio={setTipoCambio} 
+            />
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
               <button 
                 className="primary-btn" 
@@ -308,6 +314,7 @@ export default function EPCDashboard() {
               totalServicios={totalServicios} 
               detalleProcura={detalleProcura}
               detalleServicios={detalleServicios}
+              tipoCambio={tipoCambio}
             />
             <div style={{ marginTop: '15px', display: 'flex', justifyContent: 'flex-start' }}>
               <button 
