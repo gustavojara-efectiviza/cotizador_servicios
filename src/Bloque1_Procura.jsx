@@ -251,11 +251,20 @@ export default function Bloque1_Procura({
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const data = evt.target.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+        const data = new Uint8Array(evt.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        const sheetData = XLSX.utils.sheet_to_json(worksheet);
+        const sheetDataRaw = XLSX.utils.sheet_to_json(worksheet);
+
+        // Normalizar y recortar espacios en blanco de las claves de cabecera (ADHD resilient)
+        const sheetData = sheetDataRaw.map(row => {
+          const normalized = {};
+          Object.keys(row).forEach(key => {
+            normalized[key.trim()] = row[key];
+          });
+          return normalized;
+        });
 
         // Validar columnas requeridas
         const requiredCols = ['Ítem', 'Cantidad', 'Modalidad', 'Costo Base'];
@@ -272,7 +281,7 @@ export default function Bloque1_Procura({
         }
 
         const newEquipos = sheetData.map(row => {
-          let modalidad = row['Modalidad'];
+          let modalidad = row['Modalidad'] ? String(row['Modalidad']).trim() : 'FOB/EXW';
           if (!['Local', 'FOB/EXW', 'CIP'].includes(modalidad)) {
             modalidad = 'FOB/EXW'; // Fallback
           }
@@ -282,7 +291,7 @@ export default function Bloque1_Procura({
             cantidad: Math.max(1, parseInt(row['Cantidad']) || 1),
             costoBase: parseFloat(row['Costo Base']) || 0,
             modalidad,
-            ncm: row['NCM'] ? String(row['NCM']) : '8504.23.00',
+            ncm: row['NCM'] ? String(row['NCM']).trim() : '8504.23.00',
             porcentajeArancel: row['Arancel %'] !== undefined ? parseFloat(row['Arancel %']) : undefined,
             valorFlete: undefined,
             porcentajeSeguro: undefined,
@@ -299,10 +308,10 @@ export default function Bloque1_Procura({
         alert(`✅ Se importaron ${newEquipos.length} equipos desde el archivo Excel.`);
       } catch (err) {
         console.error(err);
-        alert('Ocurrió un error al procesar el archivo Excel.');
+        alert('Ocurrió un error al procesar el archivo Excel. Asegúrate de usar un archivo válido.');
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
     // Limpiar input
     e.target.value = null;
   };
