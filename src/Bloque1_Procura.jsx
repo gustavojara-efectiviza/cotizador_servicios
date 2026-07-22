@@ -255,9 +255,15 @@ export default function Bloque1_Procura({
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        const sheetDataRaw = XLSX.utils.sheet_to_json(worksheet);
+        
+        // Leer el archivo como matriz 2D para mayor control sobre filas vacías y títulos
+        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        if (rows.length === 0) {
+          alert('El archivo Excel está vacío.');
+          return;
+        }
 
-        // Normalizar claves y resolver sinónimos usando coincidencia parcial (fuzzy matching)
+        // Normalizador de cabeceras
         const normalizeHeader = (str) => {
           if (!str) return '';
           return String(str)
@@ -267,7 +273,49 @@ export default function Bloque1_Procura({
             .replace(/[^a-z0-9]/g, ""); // Quitar caracteres especiales
         };
 
-        const sheetData = sheetDataRaw.map(row => {
+        // Buscar en qué fila están las cabeceras reales (analizando las primeras 15 filas)
+        const keyWords = ['item', 'nombre', 'equipo', 'suministro', 'cantidad', 'cant', 'qty', 'modalidad', 'incoterm', 'costobase', 'fob', 'precio'];
+        let headerRowIndex = -1;
+        let bestMatchCount = 0;
+
+        for (let i = 0; i < Math.min(rows.length, 15); i++) {
+          const row = rows[i];
+          if (!Array.isArray(row)) continue;
+          let matchCount = 0;
+          row.forEach(cell => {
+            const cellStr = normalizeHeader(cell);
+            if (cellStr && keyWords.some(kw => cellStr.includes(kw))) {
+              matchCount++;
+            }
+          });
+          if (matchCount > bestMatchCount && matchCount >= 2) {
+            bestMatchCount = matchCount;
+            headerRowIndex = i;
+          }
+        }
+
+        if (headerRowIndex === -1) {
+          const firstFewRows = rows.slice(0, 3).map(r => r.join(', ')).join('\n');
+          alert(`No se detectó la fila de cabeceras en el Excel. \n\nPrimeras filas leídas:\n${firstFewRows}\n\nAsegúrate de tener columnas llamadas Ítem, Cantidad, Modalidad y Costo Base.`);
+          return;
+        }
+
+        const headers = rows[headerRowIndex].map(h => String(h || '').trim());
+        const dataRowsRaw = rows.slice(headerRowIndex + 1);
+
+        // Convertir la matriz 2D a objetos usando los headers encontrados
+        const sheetData = dataRowsRaw
+          .filter(row => row.length > 0 && row.some(cell => cell !== null && cell !== ''))
+          .map(row => {
+            const obj = {};
+            headers.forEach((header, idx) => {
+              obj[header] = row[idx];
+            });
+            return obj;
+          });
+
+        // Normalizar claves y resolver sinónimos usando coincidencia parcial (fuzzy matching)
+        const normalizedData = sheetData.map(row => {
           const normalizedRow = {};
           Object.keys(row).forEach(key => {
             const rawValue = row[key];
@@ -295,19 +343,19 @@ export default function Bloque1_Procura({
 
         // Validar columnas requeridas
         const requiredCols = ['Ítem', 'Cantidad', 'Modalidad', 'Costo Base'];
-        if (sheetData.length > 0) {
-          const firstRowKeys = Object.keys(sheetData[0]);
+        if (normalizedData.length > 0) {
+          const firstRowKeys = Object.keys(normalizedData[0]);
           const missing = requiredCols.filter(col => !firstRowKeys.includes(col));
           if (missing.length > 0) {
             alert(`El Excel no cumple con el formato requerido. \n\nColumnas detectadas: ${firstRowKeys.join(', ')} \nColumnas faltantes: ${missing.join(', ')} \n\nPor favor, verifica los nombres de tus columnas.`);
             return;
           }
         } else {
-          alert('El archivo Excel está vacío.');
+          alert('El archivo Excel no contiene filas de datos válidas.');
           return;
         }
 
-        const newEquipos = sheetData.map(row => {
+        const newEquipos = normalizedData.map(row => {
           let modalidad = row['Modalidad'] ? String(row['Modalidad']).trim() : 'FOB/EXW';
           if (!['Local', 'FOB/EXW', 'CIP'].includes(modalidad)) {
             modalidad = 'FOB/EXW'; // Fallback
