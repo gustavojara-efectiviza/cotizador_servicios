@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Bloque0_Setup from './Bloque0_Setup';
 import Bloque1_Procura from './Bloque1_Procura';
 import Bloque2_SSTT from './Bloque2_SSTT';
 import Bloque3_Resumen from './Bloque3_Resumen';
 import { upsertCotizacionV2 } from './services/dbService';
+import { auth } from './firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import Login from './Login';
 import { 
   Zap, 
   Building2, 
@@ -23,6 +26,19 @@ import {
 } from 'lucide-react';
 
 export default function EPCDashboard() {
+  // Authentication State
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Escuchar estado de autenticación
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Estado Global V2
   const [perfilComercial, setPerfilComercial] = useState('b2b'); // 'b2b' vs 'epc'
   const [rubro, setRubro] = useState('subestaciones'); // 'subestaciones', 'solar', 'movilidad'
@@ -100,6 +116,19 @@ export default function EPCDashboard() {
   };
 
   const RubroIcon = rubros[rubro].icon;
+
+  if (authLoading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', gap: '20px', height: '100vh', background: '#0f172a', color: '#ffffff' }}>
+        <Zap color="#3b82f6" size={48} className="animate-pulse" />
+        <h2>Verificando credenciales...</h2>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
 
   return (
     <div className="app-container" style={{ minHeight: '100vh', background: '#f8fafc', color: '#1e293b' }}>

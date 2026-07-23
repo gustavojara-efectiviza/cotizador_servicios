@@ -64,11 +64,29 @@ export const getEquipmentsByTensionFromData = (data, tension) => {
   return data.filter(e => e.tension === tension);
 };
 
+// Sanitizar datos para Firebase (reemplazar undefined por null)
+const cleanUndefined = (obj) => {
+  if (obj === undefined) return null;
+  if (obj === null) return null;
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanUndefined(item));
+  }
+  if (typeof obj === 'object') {
+    const cleaned = {};
+    Object.keys(obj).forEach(key => {
+      cleaned[key] = cleanUndefined(obj[key]);
+    });
+    return cleaned;
+  }
+  return obj;
+};
+
 // Guardar o actualizar cotización (Upsert) en cotizaciones_v2
 export const upsertCotizacionV2 = async (id, cotizacionData) => {
   try {
+    const cleanedData = cleanUndefined(cotizacionData);
     const payload = {
-      ...cotizacionData,
+      ...cleanedData,
       fecha_actualizacion: serverTimestamp()
     };
     if (!id) {

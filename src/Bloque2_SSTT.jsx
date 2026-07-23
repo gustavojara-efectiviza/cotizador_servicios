@@ -320,8 +320,8 @@ function Bloque2_SSTT({
 
   // Generar Cotización Consolidada para el Motor y el Panel Derecho
   const cotizacionGlobal = {
-    Cliente: cliente,
-    NombreObra: nombreObra,
+    Cliente: nombreCliente,
+    NombreObra: nombreProyecto,
     Distancia_Ida_Vuelta_km: distanciaKm,
     Dias_Permitidos_Corte: diasPermitidosCorte,
     Total_Dias_Trabajo: totalEsfuerzoHoras / 8, // Reference for the top level only
@@ -337,7 +337,7 @@ function Bloque2_SSTT({
       equiposCotizados: structuredClone(cart),
       alquileres: structuredClone(alquileres)
     });
-  }, [cliente, nombreObra, distanciaKm, diasPermitidosCorte, gastosImprevistos, margenImprevistosPorcentaje, logisticsOverrides, cart, alquileres]);
+  }, [nombreCliente, nombreProyecto, distanciaKm, diasPermitidosCorte, gastosImprevistos, margenImprevistosPorcentaje, logisticsOverrides, cart, alquileres]);
 
   const totalCostoTecnico = resultadosCalculados?.Precio_Venta_Final || 0;
 
@@ -932,11 +932,11 @@ function Bloque2_SSTT({
               <button 
                 className="primary-btn" 
                 onClick={async () => {
-                  if (!cliente || !nombreObra) {
+                  if (!nombreCliente || !nombreProyecto) {
                     alert("Por favor, ingresa el Cliente y Nombre de la Obra para poder guardar.");
                     return;
                   }
-                  await handleSaveCotizacion();
+                  await onGuardar();
                   setShowUnsavedChangesModal(false);
                   resetQuote();
                 }}
