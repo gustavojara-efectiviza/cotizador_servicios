@@ -27,49 +27,28 @@ const diccionarioNCM = [
   { ncm: '8504.34.00', desc: 'Transformadores de medida y auxiliares', arancel: 6 }
 ];
 
-export default function Bloque1_Procura({ 
-  setTotalProcura, 
-  setDetalleProcura, 
-  tipoCambio = 7500, 
-  setTipoCambio, 
-  monedaTrabajo = 'USD', 
-  onGuardar, 
-  isSaving 
+export default function Bloque1_Procura({
+  // DATOS ELEVADOS AL DASHBOARD (Single Source of Truth — FASE 1)
+  equipos = [],
+  setEquipos,
+  defaults = { fleteBase: 5, seguroBase: 2, despachoBase: 6, financieroBase: 3, adminBase: 3, arancelBase: 0, margenBase: 30 },
+  setDefaults,
+  // CALLBACKS AL PADRE
+  setTotalProcura,
+  tipoCambio = 7500,
+  setTipoCambio,
+  monedaTrabajo = 'USD',
+  onGuardar,
+  isSaving
 }) {
-  // ESTADO VISUAL DE MONEDA LOCAL
-  const [moneda, setMoneda] = useState('USD'); 
+  // ESTADO VISUAL DE MONEDA LOCAL (solo UI, no es dato de negocio)
+  const [moneda, setMoneda] = useState('USD');
+  // Estado para edición inline del tipo de cambio (reemplaza window.prompt)
+  const [editandoCambio, setEditandoCambio] = useState(false);
+  const [valorCambioTemp, setValorCambioTemp] = useState('');
 
-  // FASE 1: PANEL GLOBAL "SETEA Y OLVIDA"
-  const [defaults, setDefaults] = useState({
-    fleteBase: 5,
-    seguroBase: 2,
-    despachoBase: 6,
-    financieroBase: 3,
-    adminBase: 3,
-    arancelBase: 0,
-    margenBase: 30
-  });
-
-  // LISTA DE EQUIPOS
-  const [equipos, setEquipos] = useState([
-    {
-      id: crypto.randomUUID(),
-      nombre: 'Transformador de Potencia 80 MVA 220/23 kV',
-      cantidad: 1,
-      costoBase: 450000, // FOB
-      modalidad: 'FOB/EXW', // 'FOB/EXW' | 'CIP' | 'Local'
-      ncm: '8504.23.00',
-      porcentajeArancel: undefined, // undefined indica que usa el global por defecto
-      valorFlete: undefined,
-      porcentajeSeguro: undefined,
-      porcentajeDespacho: undefined,
-      aplicarFleteLocal: true,
-      montoFleteLocal: 3500,
-      porcentajeFinanciero: undefined,
-      porcentajeAdmin: undefined,
-      margenPorcentaje: undefined
-    }
-  ]);
+  // `defaults` y `equipos` son ahora props del EPCDashboard (Single Source of Truth).
+  // Ver EPCDashboard.jsx → useState equiposProcura / procuraDefaults.
 
   // ESTADO DE MODAL DE ADICIÓN / EDICIÓN
   const [showModal, setShowModal] = useState(false);
@@ -94,17 +73,23 @@ export default function Bloque1_Procura({
 
   const [formData, setFormData] = useState(initialFormState);
 
-  // MANEJADOR DEL CAMBIO DE MONEDA VISUAL
+  // MANEJADOR DEL CAMBIO DE MONEDA VISUAL (sin window.prompt — input inline)
   const handleToggleMoneda = () => {
     if (moneda === 'USD') {
-      const tc = window.prompt('Ingresa el Tipo de Cambio del Día (Gs. por 1 USD):', tipoCambio);
-      if (tc !== null && !isNaN(parseFloat(tc)) && parseFloat(tc) > 0) {
-        setTipoCambio(parseFloat(tc));
-        setMoneda('Gs.');
-      }
+      setValorCambioTemp(String(tipoCambio));
+      setEditandoCambio(true);
     } else {
       setMoneda('USD');
     }
+  };
+
+  const handleConfirmarCambio = () => {
+    const val = parseFloat(valorCambioTemp);
+    if (!isNaN(val) && val > 0) {
+      setTipoCambio(val);
+      setMoneda('Gs.');
+    }
+    setEditandoCambio(false);
   };
 
   // HELPER PARA FORMATEAR MONEDAS
@@ -239,9 +224,7 @@ export default function Bloque1_Procura({
   };
 
   const handleRemoveEquipo = (id) => {
-    if (window.confirm('¿Deseas quitar este equipo de la planilla de procura?')) {
-      setEquipos(prev => prev.filter(e => e.id !== id));
-    }
+    setEquipos(prev => prev.filter(e => e.id !== id));
   };
 
   // IMPORTACIÓN DE EXCEL (XLSX)
@@ -402,15 +385,12 @@ export default function Bloque1_Procura({
     return acc;
   }, { cif: 0, landed: 0, precio: 0, ganancia: 0, iva: 0 });
 
-  // EMISOR DE ESTADO GLOBAL
+  // EMISOR DE TOTAL AL DASHBOARD (el array `equipos` ya vive en el padre — no necesita subir)
   useEffect(() => {
     if (setTotalProcura) {
       setTotalProcura(resTotales.precio);
     }
-    if (setDetalleProcura) {
-      setDetalleProcura(equipos);
-    }
-  }, [resTotales.precio, equipos, setTotalProcura, setDetalleProcura]);
+  }, [resTotales.precio, setTotalProcura]);
 
   // SINCRONIZACIÓN DE MONEDA CON BLOQUE 0
   useEffect(() => {
@@ -528,24 +508,40 @@ export default function Bloque1_Procura({
               border: '1px solid #cbd5e1' 
             }}>
               <span style={{ fontSize: '0.85rem', color: '#475569' }}>Visualizar:</span>
-              <button
-                onClick={handleToggleMoneda}
-                style={{
-                  border: 'none',
-                  background: moneda === 'USD' ? '#2563eb' : '#10b981',
-                  color: '#ffffff',
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  fontWeight: 700,
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <ArrowRightLeft size={14} /> {moneda}
-              </button>
+              {editandoCambio ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <input
+                    type="number"
+                    value={valorCambioTemp}
+                    onChange={e => setValorCambioTemp(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleConfirmarCambio()}
+                    autoFocus
+                    placeholder="T.C Gs/USD"
+                    style={{ width: '90px', padding: '4px 8px', fontSize: '0.85rem', border: '1px solid #3b82f6', borderRadius: '6px', outline: 'none' }}
+                  />
+                  <button onClick={handleConfirmarCambio} title="Confirmar" style={{ border: 'none', background: '#10b981', color: '#fff', padding: '5px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem' }}>✓</button>
+                  <button onClick={() => setEditandoCambio(false)} title="Cancelar" style={{ border: 'none', background: '#f1f5f9', color: '#475569', padding: '5px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem' }}>✕</button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleToggleMoneda}
+                  style={{
+                    border: 'none',
+                    background: moneda === 'USD' ? '#2563eb' : '#10b981',
+                    color: '#ffffff',
+                    padding: '6px 14px',
+                    borderRadius: '20px',
+                    fontWeight: 700,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <ArrowRightLeft size={14} /> {moneda}
+                </button>
+              )}
             </div>
 
             {/* IMPORTADOR EXCEL */}
@@ -571,15 +567,7 @@ export default function Bloque1_Procura({
               />
             </label>
 
-            {/* GUARDAR PROGRESO */}
-            <button 
-              className="primary-btn" 
-              onClick={onGuardar}
-              disabled={isSaving}
-              style={{ width: 'auto', padding: '10px 20px', background: '#10b981', display: 'flex', alignItems: 'center', gap: '8px' }}
-            >
-              💾 {isSaving ? 'Guardando...' : 'Guardar Progreso'}
-            </button>
+
 
             {/* AGREGAR EQUIPO */}
             <button 

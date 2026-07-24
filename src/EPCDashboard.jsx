@@ -44,10 +44,40 @@ export default function EPCDashboard() {
   const [rubro, setRubro] = useState('subestaciones'); // 'subestaciones', 'solar', 'movilidad'
   const [activeBlock, setActiveBlock] = useState(1); // Bloque activo para la secuencia (1, 2, 3)
 
-  // ESTADOS GLOBALES CONSOLIDADOS (State Lifting)
+  // ESTADOS GLOBALES CONSOLIDADOS (Single Source of Truth — FASE 1)
   const [totalProcura, setTotalProcura] = useState(0);
   const [totalServicios, setTotalServicios] = useState(0);
-  const [detalleProcura, setDetalleProcura] = useState([]);
+
+  // FUENTE DE VERDAD: Array completo de equipos de Procura (elevado desde Bloque1)
+  const [equiposProcura, setEquiposProcura] = useState(() => [{
+    id: crypto.randomUUID(),
+    nombre: 'Transformador de Potencia 80 MVA 220/23 kV',
+    cantidad: 1,
+    costoBase: 450000,
+    modalidad: 'FOB/EXW',
+    ncm: '8504.23.00',
+    porcentajeArancel: undefined,
+    valorFlete: undefined,
+    porcentajeSeguro: undefined,
+    porcentajeDespacho: undefined,
+    aplicarFleteLocal: true,
+    montoFleteLocal: 3500,
+    porcentajeFinanciero: undefined,
+    porcentajeAdmin: undefined,
+    margenPorcentaje: undefined
+  }]);
+
+  // Variables globales de costo de procura (elevado desde Bloque1)
+  const [procuraDefaults, setProcuraDefaults] = useState({
+    fleteBase: 5,
+    seguroBase: 2,
+    despachoBase: 6,
+    financieroBase: 3,
+    adminBase: 3,
+    arancelBase: 0,
+    margenBase: 30
+  });
+
   const [detalleServicios, setDetalleServicios] = useState([]);
 
   // Estado Global Bloque 0
@@ -82,7 +112,7 @@ export default function EPCDashboard() {
           tipoCambioCompra,
           tipoCambioVenta
         },
-        detalleProcura,
+        detalleProcura: equiposProcura,
         detalleServicios,
         totales: {
           totalProcura,
@@ -333,8 +363,11 @@ export default function EPCDashboard() {
         {activeBlock === 1 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <Bloque1_Procura 
-              setTotalProcura={setTotalProcura} 
-              setDetalleProcura={setDetalleProcura} 
+              equipos={equiposProcura}
+              setEquipos={setEquiposProcura}
+              defaults={procuraDefaults}
+              setDefaults={setProcuraDefaults}
+              setTotalProcura={setTotalProcura}
               tipoCambio={tipoCambioVenta} 
               setTipoCambio={setTipoCambioVenta} 
               monedaTrabajo={monedaTrabajo}
@@ -422,7 +455,7 @@ export default function EPCDashboard() {
             <Bloque3_Resumen 
               totalProcura={totalProcura} 
               totalServicios={totalServicios} 
-              detalleProcura={detalleProcura}
+              detalleProcura={equiposProcura}
               detalleServicios={detalleServicios}
               tipoCambio={tipoCambioVenta}
               monedaTrabajo={monedaTrabajo}
