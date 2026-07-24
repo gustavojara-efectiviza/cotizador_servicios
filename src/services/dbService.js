@@ -81,6 +81,24 @@ const cleanUndefined = (obj) => {
   return obj;
 };
 
+// Obtener el historial de cotizaciones desde la colección v2
+export const fetchCotizacionesV2 = async () => {
+  try {
+    const col = collection(db, 'cotizaciones_v2');
+    const snapshot = await getDocs(col);
+    const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Más recientes primero
+    return list.sort((a, b) => {
+      const dateA = a.fecha_actualizacion?.toMillis?.() || a.fecha_creacion?.toMillis?.() || 0;
+      const dateB = b.fecha_actualizacion?.toMillis?.() || b.fecha_creacion?.toMillis?.() || 0;
+      return dateB - dateA;
+    });
+  } catch (error) {
+    console.error('Error obteniendo cotizaciones_v2:', error);
+    return [];
+  }
+};
+
 // Guardar o actualizar cotización (Upsert) en cotizaciones_v2
 export const upsertCotizacionV2 = async (id, cotizacionData) => {
   try {

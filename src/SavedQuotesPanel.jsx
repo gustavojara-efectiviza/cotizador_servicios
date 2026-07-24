@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, Clock, FileText, Download } from 'lucide-react';
-import { fetchCotizacionesEmitidas } from './services/dbService';
+import { fetchCotizacionesV2 } from './services/dbService';
 
 export default function SavedQuotesPanel({ isOpen, onClose, onLoadQuote }) {
   const [quotes, setQuotes] = useState([]);
@@ -8,7 +8,7 @@ export default function SavedQuotesPanel({ isOpen, onClose, onLoadQuote }) {
 
   const loadQuotes = async () => {
     setIsLoading(true);
-    const data = await fetchCotizacionesEmitidas();
+    const data = await fetchCotizacionesV2();
     setQuotes(data);
     setIsLoading(false);
   };
@@ -37,16 +37,16 @@ export default function SavedQuotesPanel({ isOpen, onClose, onLoadQuote }) {
       position: 'fixed',
       top: 0,
       right: 0,
-      width: '400px',
+      width: '420px',
       height: '100vh',
-      background: 'rgba(255, 255, 255, 0.95)',
-      backdropFilter: 'blur(10px)',
-      borderLeft: '1px solid var(--border-color)',
-      zIndex: 1000,
+      background: 'rgba(255, 255, 255, 0.97)',
+      backdropFilter: 'blur(12px)',
+      borderLeft: '1px solid #e2e8f0',
+      zIndex: 99999,
       display: 'flex',
       flexDirection: 'column',
-      boxShadow: '-5px 0 25px rgba(0,0,0,0.1)',
-      color: 'var(--text-primary)'
+      boxShadow: '-8px 0 30px rgba(0,0,0,0.12)',
+      color: '#1e293b'
     }}>
       <div style={{ padding: '20px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -88,18 +88,23 @@ export default function SavedQuotesPanel({ isOpen, onClose, onLoadQuote }) {
               }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <strong style={{ fontSize: '1.1rem', color: 'var(--accent)' }}>{quote.Cliente || 'Proyecto sin nombre'}</strong>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{formatDate(quote.fecha_creacion)}</span>
+                  <strong style={{ fontSize: '1.05rem', color: '#2563eb' }}>
+                    {quote.datosGenerales?.nombreCliente || quote.Cliente || 'Proyecto sin nombre'}
+                  </strong>
+                  <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{formatDate(quote.fecha_actualizacion || quote.fecha_creacion)}</span>
                 </div>
-                <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                <div style={{ fontSize: '0.88rem', color: '#475569', marginBottom: '5px' }}>
                   <FileText size={14} style={{ display: 'inline', marginRight: '5px', verticalAlign: 'text-bottom' }}/>
-                  {quote.NombreObra || 'Sin descripción'}
+                  {quote.datosGenerales?.nombreProyecto || quote.NombreObra || 'Sin descripción'}
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' }}>
-                  <div style={{ background: '#ecfdf5', color: '#059669', padding: '4px 8px', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 'bold' }}>
-                    {formatGs(quote.Precio_Venta_Final)}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+                  <div style={{ background: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 700 }}>
+                    {quote.totales ? 
+                      new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(quote.totales.granTotalGs || 0)
+                      : formatGs(quote.Precio_Venta_Final)
+                    }
                   </div>
-                  <div style={{ color: 'var(--accent)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <div style={{ color: '#2563eb', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}>
                     <Download size={14} /> Cargar Proyecto
                   </div>
                 </div>
