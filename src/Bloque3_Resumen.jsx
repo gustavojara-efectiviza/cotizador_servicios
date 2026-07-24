@@ -256,28 +256,8 @@ export default function Bloque3_Resumen({
             </div>
           </div>
 
-          {/* BOTONES DE ACCIONES CONSOLIDADAS */}
+          {/* BOTÓN ÚNICO DE ACCIÓN: EXPORTAR ENTREGABLE */}
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button 
-              onClick={onGuardar}
-              disabled={isSaving}
-              className="primary-btn"
-              style={{
-                width: 'auto',
-                padding: '12px 24px',
-                background: '#3b82f6',
-                color: '#ffffff',
-                borderRadius: '8px',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                boxShadow: '0 4px 6px -1px rgba(59,130,246,0.2)'
-              }}
-            >
-              💾 {isSaving ? 'Guardando...' : 'Guardar Progreso'}
-            </button>
-            
             <button 
               onClick={exportarAExcelAuditable}
               className="primary-btn"

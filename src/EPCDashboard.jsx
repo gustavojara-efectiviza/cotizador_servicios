@@ -3,6 +3,7 @@ import Bloque0_Setup from './Bloque0_Setup';
 import Bloque1_Procura from './Bloque1_Procura';
 import Bloque2_SSTT from './Bloque2_SSTT';
 import Bloque3_Resumen from './Bloque3_Resumen';
+import SavedQuotesPanel from './SavedQuotesPanel';
 import { upsertCotizacionV2 } from './services/dbService';
 import { auth } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -100,6 +101,9 @@ export default function EPCDashboard() {
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [isSaving, setIsSaving] = useState(false);
 
+  // Estado del panel de cotizaciones guardadas
+  const [showSavedQuotesPanel, setShowSavedQuotesPanel] = useState(false);
+
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 4000);
@@ -148,6 +152,43 @@ export default function EPCDashboard() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // FASE 3: REHIDRATACIÓN COMPLETA — Inyecta una cotización guardada en todos los estados centralizados
+  const handleLoadCotizacionV2 = (quote) => {
+    // --- Datos Generales (Bloque 0) ---
+    const dg = quote.datosGenerales || {};
+    setNombreCliente(dg.nombreCliente || quote.Cliente || '');
+    setNombreProyecto(dg.nombreProyecto || quote.NombreObra || '');
+    setMonedaTrabajo(dg.monedaTrabajo || 'USD');
+    setTipoCambioCompra(dg.tipoCambioCompra || 7400);
+    setTipoCambioVenta(dg.tipoCambioVenta || 7500);
+
+    // --- Procura (Bloque 1) — Elevado en FASE 1 ---
+    if (Array.isArray(quote.detalleProcura) && quote.detalleProcura.length > 0) {
+      setEquiposProcura(quote.detalleProcura);
+    }
+
+    // --- Servicios SSTT (Bloque 2) — Elevado en FASE 2 ---
+    const sstt = quote.serviciosSST || {};
+    if (Array.isArray(sstt.cart) && sstt.cart.length > 0) {
+      setCartServicios(sstt.cart);
+    }
+    if (Array.isArray(sstt.alquileres)) {
+      setAlquileresServicios(sstt.alquileres);
+    }
+    setDistanciaKm(sstt.distanciaKm ?? 100);
+    setDiasPermitidosCorte(sstt.diasPermitidosCorte ?? 3);
+    setGastosImprevistos(sstt.gastosImprevistos ?? 0);
+    setMargenImprevistosPorcentaje(sstt.margenImprevistosPorcentaje ?? 0);
+
+    // Restaurar el ID para que el próximo guardado haga UPDATE, no INSERT
+    setCotizacionId(quote.id || null);
+
+    // Navegar al Bloque 1 para que el usuario vea el estado cargado
+    setActiveBlock(1);
+    setShowSavedQuotesPanel(false);
+    showToast(`✅ Cotización "${dg.nombreProyecto || quote.NombreObra || 'Sin nombre'}" cargada.`);
   };
 
   // Nombres descriptivos para la UI
@@ -205,28 +246,79 @@ export default function EPCDashboard() {
             </div>
           </div>
 
-          {/* SELECTOR DE RUBRO */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#f1f5f9', padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-            <Boxes size={18} color="#475569" />
-            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>Rubro / Sector:</label>
-            <select 
-              value={rubro} 
-              onChange={(e) => setRubro(e.target.value)}
-              style={{ 
-                border: 'none', 
-                background: 'transparent', 
-                fontWeight: 700, 
-                color: '#0f172a', 
-                cursor: 'pointer',
+          {/* SELECTOR DE RUBRO + ACCIONES GLOBALES */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+
+            {/* Selector de rubro */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f1f5f9', padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <Boxes size={18} color="#475569" />
+              <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>Rubro / Sector:</label>
+              <select 
+                value={rubro} 
+                onChange={(e) => setRubro(e.target.value)}
+                style={{ 
+                  border: 'none', 
+                  background: 'transparent', 
+                  fontWeight: 700, 
+                  color: '#0f172a', 
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  outline: 'none',
+                  padding: '4px 8px'
+                }}
+              >
+                <option value="subestaciones">Subestaciones de Potencia AT/MT</option>
+                <option value="solar">Parques Fotovoltaicos / Solar</option>
+                <option value="movilidad">Movilidad Eléctrica / Electrolineras</option>
+              </select>
+            </div>
+
+            {/* Botón Guardar global persistente */}
+            <button
+              onClick={guardarCotizacionMaestra}
+              disabled={isSaving}
+              style={{
+                border: 'none',
+                background: isSaving ? '#94a3b8' : '#10b981',
+                color: '#ffffff',
+                padding: '10px 20px',
+                borderRadius: '8px',
+                fontWeight: 700,
                 fontSize: '0.9rem',
-                outline: 'none',
-                padding: '4px 8px'
+                cursor: isSaving ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 2px 8px rgba(16,185,129,0.3)',
+                transition: 'all 0.2s'
               }}
             >
-              <option value="subestaciones">Subestaciones de Potencia AT/MT</option>
-              <option value="solar">Parques Fotovoltaicos / Solar</option>
-              <option value="movilidad">Movilidad Eléctrica / Electrolineras</option>
-            </select>
+              💾 {isSaving ? 'Guardando...' : 'Guardar Cotización'}
+            </button>
+
+            {/* Botón Mis Cotizaciones */}
+            <button
+              onClick={() => setShowSavedQuotesPanel(true)}
+              style={{
+                border: '1px solid #e2e8f0',
+                background: '#f8fafc',
+                color: '#475569',
+                padding: '10px 16px',
+                borderRadius: '8px',
+                fontWeight: 600,
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#93c5fd'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+            >
+              📂 Mis Cotizaciones
+            </button>
+
           </div>
         </div>
 
@@ -504,6 +596,13 @@ export default function EPCDashboard() {
         )}
 
       </main>
+
+      {/* PANEL LATERAL DE COTIZACIONES GUARDADAS */}
+      <SavedQuotesPanel
+        isOpen={showSavedQuotesPanel}
+        onClose={() => setShowSavedQuotesPanel(false)}
+        onLoadQuote={handleLoadCotizacionV2}
+      />
 
       {/* FLOATING TOAST NOTIFICATION */}
       {toast.show && (
