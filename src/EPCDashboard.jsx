@@ -80,6 +80,14 @@ export default function EPCDashboard() {
 
   const [detalleServicios, setDetalleServicios] = useState([]);
 
+  // FUENTE DE VERDAD: Estados de Servicios SSTT (elevado desde Bloque2 — FASE 2)
+  const [cartServicios, setCartServicios] = useState([]);
+  const [alquileresServicios, setAlquileresServicios] = useState([]);
+  const [distanciaKm, setDistanciaKm] = useState(100);
+  const [diasPermitidosCorte, setDiasPermitidosCorte] = useState(3);
+  const [gastosImprevistos, setGastosImprevistos] = useState(0);
+  const [margenImprevistosPorcentaje, setMargenImprevistosPorcentaje] = useState(0);
+
   // Estado Global Bloque 0
   const [nombreCliente, setNombreCliente] = useState('');
   const [nombreProyecto, setNombreProyecto] = useState('');
@@ -114,6 +122,15 @@ export default function EPCDashboard() {
         },
         detalleProcura: equiposProcura,
         detalleServicios,
+        // DATOS ELEVADOS FASE 2
+        serviciosSST: {
+          cart: cartServicios,
+          alquileres: alquileresServicios,
+          distanciaKm,
+          diasPermitidosCorte,
+          gastosImprevistos,
+          margenImprevistosPorcentaje
+        },
         totales: {
           totalProcura,
           totalServicios,
@@ -416,14 +433,26 @@ export default function EPCDashboard() {
               
               <div style={{ margin: '20px 0' }}>
                 <Bloque2_SSTT 
+                  // DATOS ELEVADOS (Single Source of Truth — FASE 2)
+                  cart={cartServicios}
+                  setCart={setCartServicios}
+                  alquileres={alquileresServicios}
+                  setAlquileres={setAlquileresServicios}
+                  distanciaKm={distanciaKm}
+                  setDistanciaKm={setDistanciaKm}
+                  diasPermitidosCorte={diasPermitidosCorte}
+                  setDiasPermitidosCorte={setDiasPermitidosCorte}
+                  gastosImprevistos={gastosImprevistos}
+                  setGastosImprevistos={setGastosImprevistos}
+                  margenImprevistosPorcentaje={margenImprevistosPorcentaje}
+                  setMargenImprevistosPorcentaje={setMargenImprevistosPorcentaje}
+                  // CALLBACKS Y DATOS DE CONTEXTO
                   setTotalServicios={setTotalServicios} 
                   setDetalleServicios={setDetalleServicios} 
                   monedaTrabajo={monedaTrabajo}
                   tipoCambio={tipoCambioVenta}
                   nombreCliente={nombreCliente}
                   nombreProyecto={nombreProyecto}
-                  setNombreCliente={setNombreCliente}
-                  setNombreProyecto={setNombreProyecto}
                   onGuardar={guardarCotizacionMaestra}
                   isSaving={isSaving}
                 />

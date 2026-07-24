@@ -1,83 +1,66 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Settings, Calculator, FileText, Plus, Trash2, Zap, Layout, Database as DatabaseIcon, Edit2, ShieldAlert, Save, PackagePlus, Users, DollarSign, Calendar, Truck } from 'lucide-react';
+import { Settings, Calculator, FileText, Plus, Trash2, Zap, Layout, Database as DatabaseIcon, Edit2, ShieldAlert, PackagePlus, Users, DollarSign, Calendar, Truck } from 'lucide-react';
 import UnifilarConfigurator from './UnifilarConfigurator';
 import CRMFinancialPanelV2 from './CRMFinancialPanelV2';
-import { fetchEquiposMaestros, getTensionsFromData, getEquipmentsByTensionFromData, addEquipoMaestro, saveCotizacion } from './services/dbService';
+import { fetchEquiposMaestros, getTensionsFromData, getEquipmentsByTensionFromData, addEquipoMaestro } from './services/dbService';
 import { calcularCotizacionActiva, Maestro_Precios_Mercado, COSTO_ESPECIALISTA_DIA, COSTO_AUXILIAR_DIA, COSTO_EXTERNO_DIA, TARIFA_EQUIPOS_HORA } from './financialEngine';
 import LogisticsModal from './LogisticsModal';
-import SavedQuotesPanel from './SavedQuotesPanel';
-import Login from './Login';
-import { auth } from './firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
 import './index.css';
 
 const DEDUCTED_HOSPEDAJE_RATE = 200000;
 const DEDUCTED_VIATICO_RATE = 100000;
 
-function Bloque2_SSTT({ 
-  setTotalServicios, 
+function Bloque2_SSTT({
+  // DATOS ELEVADOS AL DASHBOARD (Single Source of Truth — FASE 2)
+  cart = [],
+  setCart,
+  alquileres = [],
+  setAlquileres,
+  distanciaKm = 100,
+  setDistanciaKm,
+  diasPermitidosCorte = 3,
+  setDiasPermitidosCorte,
+  gastosImprevistos = 0,
+  setGastosImprevistos,
+  margenImprevistosPorcentaje = 0,
+  setMargenImprevistosPorcentaje,
+  // CALLBACKS AL PADRE
+  setTotalServicios,
   setDetalleServicios,
   monedaTrabajo = 'USD',
   tipoCambio = 7500,
   nombreCliente = '',
   nombreProyecto = '',
-  setNombreCliente,
-  setNombreProyecto,
   onGuardar,
   isSaving
 }) {
   const [tension, setTension] = useState('500 kV');
   const [equipo, setEquipo] = useState('');
   const [cantidad, setCantidad] = useState(1);
-  const [activeTab, setActiveTab] = useState('cotizador'); // 'cotizador' or 'unifilar'
-  
-  // Global config
-  const [distanciaKm, setDistanciaKm] = useState(100);
-  const [diasPermitidosCorte, setDiasPermitidosCorte] = useState(3);
-  const [cart, setCart] = useState([]);
-  const [alquileres, setAlquileres] = useState([]);
-  
-  // Imprevistos (Elevados desde CRM)
-  const [gastosImprevistos, setGastosImprevistos] = useState(0);
-  const [margenImprevistosPorcentaje, setMargenImprevistosPorcentaje] = useState(0);
+  const [activeTab, setActiveTab] = useState('cotizador');
 
-  // Logistics Overrides
+  // Logistics Overrides (UI local, no necesita persistencia entre bloques)
   const [logisticsOverrides, setLogisticsOverrides] = useState({ enabled: false });
   const [showLogisticsModal, setShowLogisticsModal] = useState(false);
-  
-  // Saved Quotes
-  const [showSavedQuotesPanel, setShowSavedQuotesPanel] = useState(false);
+
+  // Catálogo Maestro desde Firestore
   const [maestroData, setMaestroData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Authentication State
-  const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-
-  // Escuchar estado de autenticación
+  // Cargar catálogo Maestro desde Firestore al montar
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setAuthLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // Cargar desde Firestore al montar la app (Solo si hay usuario logueado)
-  useEffect(() => {
-    if (!user) return;
     async function loadCatalog() {
       setIsLoading(true);
       const data = await fetchEquiposMaestros();
       if (data && data.length > 0) {
         setMaestroData(data);
       } else {
-        console.warn("No se pudo cargar de Firebase, asegúrate de haber migrado la base de datos.");
+        console.warn('No se pudo cargar el catálogo maestro desde Firebase.');
       }
       setIsLoading(false);
     }
     loadCatalog();
-  }, [user]);
+  }, []);
 
   const tensions = useMemo(() => getTensionsFromData(maestroData), [maestroData]);
   const availableEquipments = useMemo(() => getEquipmentsByTensionFromData(maestroData, tension), [maestroData, tension]);
@@ -350,40 +333,9 @@ function Bloque2_SSTT({
     }
   }, [totalCostoTecnico, resultadosCalculados?.equiposProcesados, setTotalServicios, setDetalleServicios]);
 
-  const handleLoadCotizacion = (quote) => {
-    setCart(quote.equiposCotizados || []);
-    setAlquileres(quote.alquileres || []);
-    setDistanciaKm(quote.distanciaKm || quote.Distancia_Ida_Vuelta_km || 100);
-    setDiasPermitidosCorte(quote.diasPermitidosCorte || quote.Dias_Permitidos_Corte || 3);
-    setGastosImprevistos(quote.Gastos_Imprevistos || 0);
-    setMargenImprevistosPorcentaje(quote.Margen_Imprevistos_Porcentaje || 0);
-    setLogisticsOverrides(quote.logisticsOverrides || { enabled: false });
-    
-    if (setNombreCliente) setNombreCliente(quote.Cliente || quote.datosGenerales?.nombreCliente || '');
-    if (setNombreProyecto) setNombreProyecto(quote.NombreObra || quote.datosGenerales?.nombreProyecto || '');
-    setIsDirty(false);
-  };
-
   const formatGs = (num) => {
     return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG' }).format(num);
   };
-
-  const handleLogout = async () => {
-    await signOut(auth);
-  };
-
-  if (authLoading) {
-    return (
-      <div className="app-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', gap: '20px', height: '100vh', background: 'var(--bg-main)' }}>
-        <Zap color="#3b82f6" size={48} className="animate-pulse" />
-        <h2 style={{ color: '#60a5fa' }}>Verificando credenciales...</h2>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Login />;
-  }
 
   if (isLoading) {
     return (
@@ -721,23 +673,6 @@ function Bloque2_SSTT({
           <div className="odoo-card" style={{ borderLeft: '4px solid #2563eb' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <h2 style={{ margin: 0 }}><FileText size={20} /> Datos del Proyecto</h2>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button 
-                  className="primary-btn" 
-                  onClick={() => setShowSavedQuotesPanel(true)} 
-                  style={{ width: 'auto', padding: '8px 16px', background: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}
-                >
-                  <DatabaseIcon size={16} /> Mis Cotizaciones
-                </button>
-                <button 
-                  className="primary-btn" 
-                  onClick={onGuardar}
-                  disabled={isSaving}
-                  style={{ width: 'auto', padding: '8px 16px', background: '#10b981', display: 'flex', alignItems: 'center', gap: '5px' }}
-                >
-                  💾 {isSaving ? 'Guardando...' : 'Guardar'}
-                </button>
-              </div>
             </div>
             
             <div className="config-grid">
@@ -832,14 +767,6 @@ function Bloque2_SSTT({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <h2 style={{ margin: 0 }}><Calculator size={20} /> Carrito Técnico</h2>
               <div style={{ display: 'flex', gap: '10px' }}>
-                <button 
-                  className="primary-btn" 
-                  onClick={onGuardar}
-                  disabled={isSaving}
-                  style={{ width: 'auto', padding: '8px 16px', background: '#10b981', display: 'flex', alignItems: 'center', gap: '8px' }}
-                >
-                  💾 {isSaving ? 'Guardando...' : 'Guardar Progreso'}
-                </button>
                 <button className="primary-btn" onClick={() => setShowAdHocModal(true)} style={{ width: 'auto', padding: '8px 16px', background: '#10b981' }}>
                   <PackagePlus size={16} /> Ítem Ad-Hoc
                 </button>
@@ -913,12 +840,6 @@ function Bloque2_SSTT({
         resultados={resultadosCalculados}
         currentOverrides={logisticsOverrides}
         onSave={(newOverrides) => { setLogisticsOverrides(newOverrides); setIsDirty(true); }}
-      />
-
-      <SavedQuotesPanel 
-        isOpen={showSavedQuotesPanel}
-        onClose={() => setShowSavedQuotesPanel(false)}
-        onLoadQuote={handleLoadCotizacion}
       />
 
       {showUnsavedChangesModal && (
