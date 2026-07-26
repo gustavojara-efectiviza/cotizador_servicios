@@ -1,5 +1,6 @@
 import React from 'react';
 import { ShieldCheck, TrendingUp, DollarSign, Award, Calculator, ArrowRight, Layers, FileSpreadsheet } from 'lucide-react';
+import { exportarAExcelAuditable } from './utils/excelExport';
 import * as XLSX from 'xlsx';
 
 export default function Bloque3_Resumen({ 
@@ -9,6 +10,7 @@ export default function Bloque3_Resumen({
   detalleServicios = [],
   tipoCambio = 7500,
   monedaTrabajo = 'USD',
+  esLicitacion = true,
   onGuardar,
   isSaving
 }) {
@@ -22,220 +24,73 @@ export default function Bloque3_Resumen({
     return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(valGs);
   };
 
-  // EXPORTACIÓN EXCEL AUDITABLE CONSOLIDADA (MASTER DELIVERABLE)
-  const exportarAExcelAuditable = () => {
-    const workbook = XLSX.utils.book_new();
-    const formatNum = (n) => Math.round(n || 0);
-    const formatPct = (n) => `${(n || 0).toFixed(1)}%`;
-
-    // -------------------------------------------------------------------------
-    // HOJA 1: RESUMEN EJECUTIVO EPC CONSOLIDADO
-    // -------------------------------------------------------------------------
-    const rowsResumen = [
-      ["CONSOLIDACIÓN COMERCIAL EPC - PROPUESTA LLAVE EN MANO"],
-      [],
-      ["Macro-Partida / Módulo", "Costo Directo (Gs.)", "Margen %", "Utilidad Neta (Gs.)", "Precio Venta (Gs.)"]
-    ];
-
-    // Calculamos totales de Procura para la tabla resumen
-    let costoTotalProcura = 0, gananciaTotalProcura = 0, precioTotalProcura = 0;
-    detalleProcura.forEach(eq => {
+  const handleExportExcel = async () => {
+    // 1. ADAPTADOR DE PROCURA (Calculando Landed Cost como Costo Directo Base)
+    const procuraAdaptada = detalleProcura.map(eq => {
       const qty = eq.cantidad || 1;
-      const fob = (eq.costoBase || 0) * qty;
-      const flete = eq.tipoFlete === 'porcentaje' ? fob * ((eq.valorFlete || 0) / 100) : (eq.valorFlete || 0) * qty;
-      const seguro = (fob + flete) * ((eq.porcentajeSeguro || 0) / 100);
-      const cif = fob + flete + seguro;
-      const arancel = cif * ((eq.porcentajeArancel || 0) / 100);
-      const despacho = cif * ((eq.porcentajeDespacho || 0) / 100);
-      const fleteLocal = eq.aplicarFleteLocal ? ((eq.montoFleteLocal || 0) * qty) : 0;
-      const fin = cif * ((eq.porcentajeFinanciero || 0) / 100);
-      const admin = cif * ((eq.porcentajeAdmin || 0) / 100);
-      const landedCost = cif + arancel + despacho + fleteLocal + fin + admin;
-      const margen = Math.min(0.99, (eq.margenPorcentaje || 0) / 100);
-      const precioVenta = landedCost / (1 - margen);
+      const fobUnit = eq.costoBase || 0;
+      const fobTotal = fobUnit * qty;
+      const fleteTotal = eq.tipoFlete === 'porcentaje' ? fobTotal * ((eq.valorFlete || 0) / 100) : (eq.valorFlete || 0) * qty;
+      const seguroTotal = (fobTotal + fleteTotal) * ((eq.porcentajeSeguro || 0) / 100);
+      const cifTotal = fobTotal + fleteTotal + seguroTotal;
+      const arancelTotal = cifTotal * ((eq.porcentajeArancel || 0) / 100);
+      const despachoTotal = cifTotal * ((eq.porcentajeDespacho || 0) / 100);
+      const fleteLocalTotal = eq.aplicarFleteLocal ? ((eq.montoFleteLocal || 0) * qty) : 0;
+      const finTotal = cifTotal * ((eq.porcentajeFinanciero || 0) / 100);
+      const adminTotal = cifTotal * ((eq.porcentajeAdmin || 0) / 100);
       
-      // Convertir a Gs (T.C tipoCambio)
-      const tc = tipoCambio || 7500;
-      costoTotalProcura += landedCost * tc;
-      precioTotalProcura += precioVenta * tc;
-      gananciaTotalProcura += (precioVenta - landedCost) * tc;
+      const landedCostTotal = cifTotal + arancelTotal + despachoTotal + fleteLocalTotal + finTotal + adminTotal;
+      const landedCostUnit = qty > 0 ? landedCostTotal / qty : 0;
+      
+      const margenDecimal = Math.min(0.99, (eq.margenPorcentaje || 0) / 100);
+
+      return {
+        descripcion: eq.nombre || 'Suministro sin nombre',
+        cantidad: qty,
+        costoBase: landedCostUnit,
+        margen: margenDecimal,
+        moneda: 'USD'
+      };
     });
 
-    if (precioTotalProcura === 0 && totalProcura > 0) {
-      precioTotalProcura = totalProcura * tc;
-      costoTotalProcura = totalProcura * tc * 0.70;
-      gananciaTotalProcura = totalProcura * tc * 0.30;
-    }
-
-    const margenProcuraPct = precioTotalProcura > 0 ? (gananciaTotalProcura / precioTotalProcura) * 100 : 0;
-    rowsResumen.push([
-      "Procura de Equipos e Importación DDP (Bloque 1)",
-      formatNum(costoTotalProcura),
-      formatPct(margenProcuraPct),
-      formatNum(gananciaTotalProcura),
-      formatNum(precioTotalProcura)
-    ]);
-
-    // Calculamos totales de Servicios SSTT
-    let costoTotalServicios = 0, gananciaTotalServicios = 0, precioTotalServicios = 0;
-    detalleServicios.forEach(item => {
+    // 2. ADAPTADOR DE SERVICIOS
+    const serviciosAdaptados = detalleServicios.map(item => {
       const qty = item.cantidad || 1;
-      costoTotalServicios += (item.costo_directo_unitario || 0) * qty;
-      gananciaTotalServicios += (item.utilidad_neta_unitaria || 0) * qty;
-      precioTotalServicios += (item.precio_unitario_final || 0) * qty;
+      const costoDirUnitario = item.costo_directo_unitario || 0;
+      const precioFinalUnitario = item.precio_unitario_final || 0;
+      
+      let margenCalc = 0;
+      if (precioFinalUnitario > costoDirUnitario && precioFinalUnitario > 0) {
+         margenCalc = 1 - (costoDirUnitario / precioFinalUnitario);
+      }
+
+      return {
+        descripcion: item.equipo || item.nombre || 'Servicio Especializado',
+        cantidad: qty,
+        costoBase: costoDirUnitario,
+        margen: margenCalc,
+        moneda: 'PYG'
+      };
     });
 
-    if (precioTotalServicios === 0 && totalServicios > 0) {
-      precioTotalServicios = totalServicios;
-      costoTotalServicios = totalServicios * 0.60;
-      gananciaTotalServicios = totalServicios * 0.40;
-    }
+    // 3. NORMALIZAR MONEDA DE COSTOS GLOBALES
+    // granTotal está siempre en PYG.
+    const contingenciaPYG = granTotal * 0.03;
+    const riesgosNormalizados = monedaTrabajo === 'USD' ? (contingenciaPYG / tipoCambio) : contingenciaPYG;
 
-    const margenServiciosPct = precioTotalServicios > 0 ? (gananciaTotalServicios / precioTotalServicios) * 100 : 0;
-    rowsResumen.push([
-      "Servicios Especializados y SSTT (Bloque 2)",
-      formatNum(costoTotalServicios),
-      formatPct(margenServiciosPct),
-      formatNum(gananciaTotalServicios),
-      formatNum(precioTotalServicios)
-    ]);
-
-    // Totales y Estructura Fiscal / Garantías
-    const subtotalOferta = precioTotalProcura + precioTotalServicios;
-    const iva10 = subtotalOferta * 0.10;
-    const granTotalConIVA = subtotalOferta * 1.10;
-
-    rowsResumen.push([]);
-    rowsResumen.push(["", "", "", "SUBTOTAL CONSOLIDADO", formatNum(subtotalOferta)]);
-    rowsResumen.push(["", "", "", "IVA (10%)", formatNum(iva10)]);
-    rowsResumen.push(["", "", "", "OFERTA COMERCIAL GRAN TOTAL", formatNum(granTotalConIVA)]);
-    rowsResumen.push([]);
-    rowsResumen.push(["PÓLIZAS Y ESTRUCTURA DE GARANTÍAS EPC"]);
-    rowsResumen.push(["Póliza de Fiel Cumplimiento (5%)", formatNum(subtotalOferta * 0.05)]);
-    rowsResumen.push(["Póliza de Anticipo Financiero (20%)", formatNum(subtotalOferta * 0.20)]);
-    rowsResumen.push(["Fondo de Contingencia Licitatoria (3%)", formatNum(subtotalOferta * 0.03)]);
-
-    const wsResumen = XLSX.utils.aoa_to_sheet(rowsResumen);
-    wsResumen['!cols'] = [{wch: 45}, {wch: 22}, {wch: 15}, {wch: 22}, {wch: 25}];
-    XLSX.utils.book_append_sheet(workbook, wsResumen, "Resumen Ejecutivo EPC");
-
-    // -------------------------------------------------------------------------
-    // HOJA 2: AUDITORÍA DE PROCURA DDP (BLOQUE 1)
-    // -------------------------------------------------------------------------
-    const rowsProcura = [
-      ["AUDITORÍA DE PROCURA DE EQUIPOS E IMPORTACIÓN (LANDED COST DDP)"],
-      [],
-      [
-        "Equipo / Suministro", "Cant", "NCM", "FOB Unit (USD)", "Flete Int (USD)", 
-        "Seguro Int (USD)", "CIF Unit (USD)", "Arancel (USD)", "Despacho (USD)", 
-        "Flete Local (USD)", "Financiero (USD)", "Admin (USD)", "Landed Cost Unit (USD)", 
-        "Landed Cost Total (USD)", "Margen %", "Precio Venta Unit (USD)", "Precio Venta Total (USD)"
-      ]
-    ];
-
-    if (detalleProcura.length === 0) {
-      rowsProcura.push(["Sin equipos cargados en procura", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]);
-    } else {
-      detalleProcura.forEach(eq => {
-        const qty = eq.cantidad || 1;
-        const fobUnit = eq.costoBase || 0;
-        const fobTotal = fobUnit * qty;
-        const fleteTotal = eq.tipoFlete === 'porcentaje' ? fobTotal * ((eq.valorFlete || 0) / 100) : (eq.valorFlete || 0) * qty;
-        const seguroTotal = (fobTotal + fleteTotal) * ((eq.porcentajeSeguro || 0) / 100);
-        const cifTotal = fobTotal + fleteTotal + seguroTotal;
-        const arancelTotal = cifTotal * ((eq.porcentajeArancel || 0) / 100);
-        const despachoTotal = cifTotal * ((eq.porcentajeDespacho || 0) / 100);
-        const fleteLocalTotal = eq.aplicarFleteLocal ? ((eq.montoFleteLocal || 0) * qty) : 0;
-        const finTotal = cifTotal * ((eq.porcentajeFinanciero || 0) / 100);
-        const adminTotal = cifTotal * ((eq.porcentajeAdmin || 0) / 100);
-        const landedCostTotal = cifTotal + arancelTotal + despachoTotal + fleteLocalTotal + finTotal + adminTotal;
-        const landedCostUnit = landedCostTotal / qty;
-        const margen = Math.min(0.99, (eq.margenPorcentaje || 0) / 100);
-        const precioVentaTotal = landedCostTotal / (1 - margen);
-        const precioVentaUnit = precioVentaTotal / qty;
-
-        rowsProcura.push([
-          eq.nombre,
-          qty,
-          eq.ncm,
-          formatNum(fobUnit),
-          formatNum(fleteTotal / qty),
-          formatNum(seguroTotal / qty),
-          formatNum(cifTotal / qty),
-          formatNum(arancelTotal / qty),
-          formatNum(despachoTotal / qty),
-          formatNum(fleteLocalTotal / qty),
-          formatNum(finTotal / qty),
-          formatNum(adminTotal / qty),
-          formatNum(landedCostUnit),
-          formatNum(landedCostTotal),
-          formatPct(eq.margenPorcentaje),
-          formatNum(precioVentaUnit),
-          formatNum(precioVentaTotal)
-        ]);
-      });
-    }
-
-    const wsProcura = XLSX.utils.aoa_to_sheet(rowsProcura);
-    wsProcura['!cols'] = [
-      {wch: 35}, {wch: 8}, {wch: 12}, {wch: 16}, {wch: 15}, 
-      {wch: 15}, {wch: 16}, {wch: 14}, {wch: 14}, {wch: 16}, 
-      {wch: 15}, {wch: 14}, {wch: 20}, {wch: 22}, {wch: 12}, 
-      {wch: 20}, {wch: 22}
-    ];
-    XLSX.utils.book_append_sheet(workbook, wsProcura, "Audit Procura DDP");
-
-    // -------------------------------------------------------------------------
-    // HOJA 3: AUDITORÍA DE SERVICIOS SSTT (BLOQUE 2)
-    // -------------------------------------------------------------------------
-    const rowsSSTT = [
-      ["AUDITORÍA DE SERVICIOS ESPECIALIZADOS Y MONTAJE (SSTT V1)"],
-      [],
-      [
-        "Equipo / Servicio", "Tensión / Cat", "Estrategia", "Cantidad", 
-        "Costo Directo Base", "Costo Service Fee", "Costo Amortización", 
-        "Costo Directo Total", "Utilidad Neta Unit", "Margen %", 
-        "Precio Venta Unitario", "Precio Venta Total Ítem"
-      ]
-    ];
-
-    if (detalleServicios.length === 0) {
-      rowsSSTT.push(["Sin servicios cargados en carrito SSTT", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]);
-    } else {
-      detalleServicios.forEach(item => {
-        const qty = item.cantidad || 1;
-        const costoBase = (item.costo_directo_unitario || 0) - (item.costoServiceFee || 0) - (item.costoAmortizacion || 0);
-        const precioUnit = item.precio_unitario_final || 0;
-        const utilUnit = item.utilidad_neta_unitaria || 0;
-        const margenReal = precioUnit > 0 ? (utilUnit / precioUnit) * 100 : 0;
-
-        rowsSSTT.push([
-          item.equipo,
-          item.tension || 'N/A',
-          item.estrategia || 'Normal',
-          qty,
-          formatNum(costoBase),
-          formatNum(item.costoServiceFee || 0),
-          formatNum(item.costoAmortizacion || 0),
-          formatNum(item.costo_directo_unitario || 0),
-          formatNum(utilUnit),
-          formatPct(margenReal),
-          formatNum(precioUnit),
-          formatNum(precioUnit * qty)
-        ]);
-      });
-    }
-
-    const wsSSTT = XLSX.utils.aoa_to_sheet(rowsSSTT);
-    wsSSTT['!cols'] = [
-      {wch: 35}, {wch: 15}, {wch: 14}, {wch: 10}, 
-      {wch: 18}, {wch: 18}, {wch: 18}, {wch: 20}, 
-      {wch: 18}, {wch: 12}, {wch: 20}, {wch: 22}
-    ];
-    XLSX.utils.book_append_sheet(workbook, wsSSTT, "Audit SSTT Servicios");
-
-    // DESCARGAR LIBRO AUDITABLE
-    XLSX.writeFile(workbook, "Entregable_Consolidado_EPC_Auditable.xlsx");
+    const estadoGlobal = {
+      equipos: procuraAdaptada,
+      servicios: serviciosAdaptados,
+      viaticos: 0,
+      riesgos: riesgosNormalizados,
+      logistica: 0,
+      financieros: 0,
+      margenGlobal: 0.15,
+      esLicitacion,
+      moneda: monedaTrabajo,
+      tasaCambio: tipoCambio
+    };
+    await exportarAExcelAuditable(estadoGlobal);
   };
 
   return (
@@ -259,22 +114,24 @@ export default function Bloque3_Resumen({
           {/* BOTÓN ÚNICO DE ACCIÓN: EXPORTAR ENTREGABLE */}
           <div style={{ display: 'flex', gap: '10px' }}>
             <button 
-              onClick={exportarAExcelAuditable}
-              className="primary-btn"
+              onClick={handleExportExcel}
               style={{
                 width: 'auto',
                 padding: '12px 24px',
-                background: '#10b981',
+                background: 'linear-gradient(135deg, #0d2d5e 0%, #1a4f8a 100%)',
                 color: '#ffffff',
                 borderRadius: '8px',
                 fontWeight: 700,
                 display: 'flex',
                 alignItems: 'center',
                 gap: '10px',
-                boxShadow: '0 4px 6px -1px rgba(16,185,129,0.2)'
+                boxShadow: '0 4px 12px rgba(13,45,94,0.35)',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '0.95rem'
               }}
             >
-              <FileSpreadsheet size={20} /> Exportar Entregable Auditable Excel (.xlsx)
+              <FileSpreadsheet size={20} /> Exportar Entregable Excel (.xlsx)
             </button>
           </div>
         </div>
