@@ -29,7 +29,8 @@ export const calcularCotizacionActiva = (cotizacion) => {
   const Dias_Permitidos_Corte = Math.max(1, Number(cotizacion.Dias_Permitidos_Corte) || 1);
   const Distancia_Ida_Vuelta_km = Number(cotizacion.Distancia_Ida_Vuelta_km) || 0;
   
-  const Gastos_Imprevistos = Number(cotizacion.Gastos_Imprevistos) || 0;
+  const condicionTrabajo = Number(cotizacion.condicionTrabajo) || 1.0;
+  const Gastos_Imprevistos = (Number(cotizacion.Gastos_Imprevistos) || 0) * condicionTrabajo;
   const Margen_Imprevistos_Porcentaje = Number(cotizacion.Margen_Imprevistos_Porcentaje) || 0;
   const Precio_Mercado_Aplicado = Number(cotizacion.Precio_Mercado_Aplicado) || 0;
 
@@ -97,10 +98,14 @@ export const calcularCotizacionActiva = (cotizacion) => {
     const auxiliares = item.overrides?.ayudante ?? item.baseData?.ayudante ?? 1;
     const externos = item.overrides?.externo ?? item.baseData?.externo ?? 0;
 
-    const Costo_Tecnologia = horas_equipo * TARIFA_EQUIPOS_HORA;
-    const Costo_MO_Esp = (horas_equipo / 8) * especialistas_internos * COSTO_ESPECIALISTA_DIA;
-    const Costo_MO_Aux = (horas_equipo / 8) * auxiliares * COSTO_AUXILIAR_DIA;
-    const Costo_MO_Ext = (horas_equipo / 8) * externos * COSTO_EXTERNO_DIA;
+    // LÓGICA DE MODO RESERVA (STANDBY)
+    const isReserva = item.overrides?.modoUso === 'Reserva';
+    const factorReserva = isReserva ? 0.3 : 1.0;
+
+    const Costo_Tecnologia = horas_equipo * TARIFA_EQUIPOS_HORA * factorReserva;
+    const Costo_MO_Esp = isReserva ? 0 : (horas_equipo / 8) * especialistas_internos * COSTO_ESPECIALISTA_DIA;
+    const Costo_MO_Aux = isReserva ? 0 : (horas_equipo / 8) * auxiliares * COSTO_AUXILIAR_DIA;
+    const Costo_MO_Ext = isReserva ? 0 : (horas_equipo / 8) * externos * COSTO_EXTERNO_DIA;
     
     const Utilidad_Tecnologia = Costo_Tecnologia * Variables_Globales.MARGEN_TECNOLOGIA;
     const Utilidad_MO_Propia = (Costo_MO_Esp + Costo_MO_Aux) * (Variables_Globales.Margen_Ganancia_MO_Propia / 100);
@@ -143,7 +148,9 @@ export const calcularCotizacionActiva = (cotizacion) => {
       if (esRealmenteTrafo) Cantidad_Trafos += qty;
       Utilidad_Oculta_TopDown += utilidad_neta_unitaria * qty;
       
-      Total_Dias_Esfuerzo += ((horas_equipo / 8) * (especialistas_internos + auxiliares + externos)) * qty;
+      if (!isReserva) {
+        Total_Dias_Esfuerzo += ((horas_equipo / 8) * (especialistas_internos + auxiliares + externos)) * qty;
+      }
       
     } else {
       estrategia = 'Normal';
@@ -165,7 +172,9 @@ export const calcularCotizacionActiva = (cotizacion) => {
       Ganancia_Tecnologia_Total += Utilidad_Tecnologia * qty;
       Ganancia_MO_Externa_Total += Utilidad_MO_Externa * qty;
       
-      Total_Dias_Esfuerzo += ((horas_equipo / 8) * (especialistas_internos + auxiliares + externos)) * qty;
+      if (!isReserva) {
+        Total_Dias_Esfuerzo += ((horas_equipo / 8) * (especialistas_internos + auxiliares + externos)) * qty;
+      }
       if (esRealmenteTrafo) Cantidad_Trafos += qty;
     }
     
@@ -182,7 +191,12 @@ export const calcularCotizacionActiva = (cotizacion) => {
       admin_unitario,
       utilidad_neta_unitaria,
       precio_unitario_final: Precio_Unitario_Final,
-      precio_total_final: Precio_Unitario_Final * qty
+      precio_total_final: Precio_Unitario_Final * qty,
+      // Desglose crudo para Auditoría (Salvaguarda a 0)
+      Costo_Tecnologia_Item: isTercerizado ? 0 : (Number(Costo_Tecnologia) || 0),
+      Costo_MO_Item: isTercerizado ? 0 : ((Number(Costo_MO_Esp) || 0) + (Number(Costo_MO_Aux) || 0) + (Number(Costo_MO_Ext) || 0)),
+      Costo_Subcontrato_Item: isTercerizado ? (Number(item.overrides?.costo_total_base ?? item.baseData?.costo_total_base) || 0) : 0,
+      Margen_Subcontrato_Item: isTercerizado ? (Number(item.overrides?.margen_tercerizado ?? 30) || 0) : 0
     });
   });
 

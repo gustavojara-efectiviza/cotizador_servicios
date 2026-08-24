@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import App from './App';
 import EPCDashboard from './EPCDashboard';
-import { Layers, Sliders } from 'lucide-react';
+import LaboratorioPrecios from './LaboratorioPrecios';
+import { Layers, Sliders, TestTube } from 'lucide-react';
 
 export default function AppWrapper() {
   const [version, setVersion] = useState(() => {
     return localStorage.getItem('zunz_cotizador_version') || 'v2';
   });
+  const [mostrarLab, setMostrarLab] = useState(false);
 
   const handleSwitchVersion = (ver) => {
     setVersion(ver);
@@ -77,13 +79,37 @@ export default function AppWrapper() {
           >
             <Layers size={14} /> Versión 2 (Módulo EPC)
           </button>
+          <button
+            onClick={() => setMostrarLab(true)}
+            style={{
+              border: 'none',
+              padding: '6px 16px',
+              borderRadius: '20px',
+              fontWeight: 700,
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.2s ease',
+              background: 'transparent',
+              color: '#94a3b8',
+              boxShadow: 'none'
+            }}
+          >
+            <TestTube size={14} /> Laboratorio de Precios
+          </button>
         </div>
       </div>
 
       {/* Contenido Principal de la Aplicación */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        {version === 'v1' ? <App /> : <EPCDashboard />}
+        {version === 'v1' && <App />}
+        {version === 'v2' && <EPCDashboard />}
       </div>
+
+      {/* Modal Laboratorio */}
+      {mostrarLab && <LaboratorioPrecios onClose={() => setMostrarLab(false)} />}
     </div>
   );
 }

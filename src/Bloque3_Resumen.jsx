@@ -12,7 +12,8 @@ export default function Bloque3_Resumen({
   monedaTrabajo = 'USD',
   esLicitacion = true,
   onGuardar,
-  isSaving
+  isSaving,
+  copilotRef
 }) {
   const granTotal = (Number(totalProcura) * tipoCambio || 0) + (Number(totalServicios) || 0);
 
@@ -30,14 +31,29 @@ export default function Bloque3_Resumen({
       const qty = eq.cantidad || 1;
       const fobUnit = eq.costoBase || 0;
       const fobTotal = fobUnit * qty;
-      const fleteTotal = eq.tipoFlete === 'porcentaje' ? fobTotal * ((eq.valorFlete || 0) / 100) : (eq.valorFlete || 0) * qty;
-      const seguroTotal = (fobTotal + fleteTotal) * ((eq.porcentajeSeguro || 0) / 100);
+      const mod = eq.modalidad || 'FOB/EXW';
+      
+      const fletePct = eq.valorFlete !== undefined ? eq.valorFlete : 5; // 5% default
+      const seguroPct = eq.porcentajeSeguro !== undefined ? eq.porcentajeSeguro : 2; // 2% default
+      
+      const fleteTotal = mod === 'FOB/EXW' ? fobTotal * (fletePct / 100) : 0;
+      const seguroTotal = mod === 'FOB/EXW' ? (fobTotal + fleteTotal) * (seguroPct / 100) : 0;
+      
       const cifTotal = fobTotal + fleteTotal + seguroTotal;
-      const arancelTotal = cifTotal * ((eq.porcentajeArancel || 0) / 100);
-      const despachoTotal = cifTotal * ((eq.porcentajeDespacho || 0) / 100);
+      
+      const arancelPct = eq.porcentajeArancel !== undefined ? eq.porcentajeArancel : 0;
+      const despachoPct = eq.porcentajeDespacho !== undefined ? eq.porcentajeDespacho : 6;
+      
+      const arancelTotal = mod !== 'Local' ? cifTotal * (arancelPct / 100) : 0;
+      const despachoTotal = mod !== 'Local' ? cifTotal * (despachoPct / 100) : 0;
+      
       const fleteLocalTotal = eq.aplicarFleteLocal ? ((eq.montoFleteLocal || 0) * qty) : 0;
-      const finTotal = cifTotal * ((eq.porcentajeFinanciero || 0) / 100);
-      const adminTotal = cifTotal * ((eq.porcentajeAdmin || 0) / 100);
+      
+      const finPct = eq.porcentajeFinanciero !== undefined ? eq.porcentajeFinanciero : 3;
+      const adminPct = eq.porcentajeAdmin !== undefined ? eq.porcentajeAdmin : 3;
+      
+      const finTotal = cifTotal * (finPct / 100);
+      const adminTotal = cifTotal * (adminPct / 100);
       
       const landedCostTotal = cifTotal + arancelTotal + despachoTotal + fleteLocalTotal + finTotal + adminTotal;
       const landedCostUnit = qty > 0 ? landedCostTotal / qty : 0;
@@ -47,9 +63,19 @@ export default function Bloque3_Resumen({
       return {
         descripcion: eq.nombre || 'Suministro sin nombre',
         cantidad: qty,
-        costoBase: landedCostUnit,
+        costoBase: landedCostUnit, // Costo total base (Landed Cost Unitario)
         margen: margenDecimal,
-        moneda: 'USD'
+        moneda: 'USD',
+        // --- Variables de Desglose para Auditoría ---
+        fobUnit: fobUnit,
+        fleteTotal: fleteTotal,
+        seguroTotal: seguroTotal,
+        cifTotal: cifTotal,
+        arancelTotal: arancelTotal,
+        despachoTotal: despachoTotal,
+        fleteLocalTotal: fleteLocalTotal,
+        finTotal: finTotal,
+        adminTotal: adminTotal
       };
     });
 
@@ -69,7 +95,15 @@ export default function Bloque3_Resumen({
         cantidad: qty,
         costoBase: costoDirUnitario,
         margen: margenCalc,
-        moneda: 'PYG'
+        moneda: 'PYG',
+        estrategia: item.estrategia || 'Normal',
+        Costo_Tecnologia_Item: Number(item.Costo_Tecnologia_Item) || 0,
+        Costo_MO_Item: Number(item.Costo_MO_Item) || 0,
+        Costo_Subcontrato_Item: Number(item.Costo_Subcontrato_Item) || 0,
+        Margen_Subcontrato_Item: Number(item.Margen_Subcontrato_Item) || 0,
+        costoServiceFee: Number(item.costoServiceFee) || 0,
+        margenServiceFee: Number(item.margenServiceFee) || 0,
+        costoAmortizacion: Number(item.costoAmortizacion) || 0
       };
     });
 
@@ -91,6 +125,10 @@ export default function Bloque3_Resumen({
       tasaCambio: tipoCambio
     };
     await exportarAExcelAuditable(estadoGlobal);
+    
+    if (copilotRef && copilotRef.current) {
+      copilotRef.current.celebrarExito('¡Exportación Exitosa! Excel generado.');
+    }
   };
 
   return (
@@ -117,21 +155,32 @@ export default function Bloque3_Resumen({
               onClick={handleExportExcel}
               style={{
                 width: 'auto',
-                padding: '12px 24px',
-                background: 'linear-gradient(135deg, #0d2d5e 0%, #1a4f8a 100%)',
+                padding: '14px 28px',
+                background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)',
                 color: '#ffffff',
-                borderRadius: '8px',
-                fontWeight: 700,
+                borderRadius: '12px',
+                fontWeight: 800,
                 display: 'flex',
                 alignItems: 'center',
                 gap: '10px',
-                boxShadow: '0 4px 12px rgba(13,45,94,0.35)',
+                boxShadow: '0 6px 20px rgba(234, 88, 12, 0.4)',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: '0.95rem'
+                fontSize: '1.05rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                transition: 'all 0.3s ease',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
+                e.currentTarget.style.boxShadow = '0 8px 25px rgba(234, 88, 12, 0.5)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(234, 88, 12, 0.4)';
               }}
             >
-              <FileSpreadsheet size={20} /> Exportar Entregable Excel (.xlsx)
+              <FileSpreadsheet size={22} /> Exportar Entregable Excel (.xlsx)
             </button>
           </div>
         </div>

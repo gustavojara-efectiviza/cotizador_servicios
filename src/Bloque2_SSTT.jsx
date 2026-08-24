@@ -24,6 +24,8 @@ function Bloque2_SSTT({
   setGastosImprevistos,
   margenImprevistosPorcentaje = 0,
   setMargenImprevistosPorcentaje,
+  condicionTrabajo = 1.0,
+  setCondicionTrabajo,
   // CALLBACKS AL PADRE
   setTotalServicios,
   setDetalleServicios,
@@ -69,7 +71,8 @@ function Bloque2_SSTT({
   const [editingItem, setEditingItem] = useState(null);
   const [overrideState, setOverrideState] = useState({});
 
-  // Ad-Hoc State
+  // Ad-Hoc & Catalog State
+  const [showCatalogModal, setShowCatalogModal] = useState(false);
   const [showAdHocModal, setShowAdHocModal] = useState(false);
   const [adHocState, setAdHocState] = useState({
     equipo: '', tension: '500 kV', horas_equipo: 4, interno: 1, ayudante: 1, externo: 0,
@@ -220,6 +223,7 @@ function Bloque2_SSTT({
       margenServiceFee: item.overrides?.margenServiceFee ?? 0,
       costoAmortizacion: item.overrides?.costoAmortizacion ?? 0,
       margenAmortizacion: item.overrides?.margenAmortizacion ?? 0,
+      modoUso: item.overrides?.modoUso ?? 'Activa'
     });
   };
 
@@ -311,6 +315,7 @@ function Bloque2_SSTT({
     Precio_Mercado_Aplicado: 0,
     Gastos_Imprevistos: gastosImprevistos,
     Margen_Imprevistos_Porcentaje: margenImprevistosPorcentaje,
+    condicionTrabajo: condicionTrabajo,
     logisticsOverrides: logisticsOverrides
   };
 
@@ -320,7 +325,7 @@ function Bloque2_SSTT({
       equiposCotizados: structuredClone(cart),
       alquileres: structuredClone(alquileres)
     });
-  }, [nombreCliente, nombreProyecto, distanciaKm, diasPermitidosCorte, gastosImprevistos, margenImprevistosPorcentaje, logisticsOverrides, cart, alquileres]);
+  }, [nombreCliente, nombreProyecto, distanciaKm, diasPermitidosCorte, gastosImprevistos, margenImprevistosPorcentaje, condicionTrabajo, logisticsOverrides, cart, alquileres]);
 
   const totalCostoTecnico = resultadosCalculados?.Precio_Venta_Final || 0;
 
@@ -373,6 +378,25 @@ function Bloque2_SSTT({
                 {overrideState.is_tercerizado && (
                   <p style={{ fontSize: '0.85rem', color: '#a855f7', marginTop: '10px', marginLeft: '25px' }}>
                     Al activar esta opción, los campos de personal operativo y viáticos quedarán anulados (0). El costo ingresado se tomará como un <strong>Flat Rate</strong> (Costo de Subcontratista) que impactará directo al Costo Directo.
+                  </p>
+                )}
+              </div>
+
+              <div style={{ background: 'rgba(0,0,0,0.05)', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '8px' }}>
+                  Modo de Despliegue Operativo
+                </label>
+                <select 
+                  value={overrideState.modoUso} 
+                  onChange={(e) => setOverrideState({...overrideState, modoUso: e.target.value})}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontWeight: 'bold' }}
+                >
+                  <option value="Activa">Operación Activa</option>
+                  <option value="Reserva">Standby / Reserva en Campo</option>
+                </select>
+                {overrideState.modoUso === 'Reserva' && (
+                  <p style={{ fontSize: '0.85rem', color: '#1e40af', marginTop: '10px' }}>
+                    <strong>Modo Reserva:</strong> El costo de tecnología se cobrará al 30% (Inmovilización de Capital). La mano de obra y viáticos no se duplicarán para este ítem.
                   </p>
                 )}
               </div>
@@ -664,9 +688,9 @@ function Bloque2_SSTT({
         </div>
       )}
 
-      <main className="main-content">
+      <main className="main-content" style={{ display: 'grid', gridTemplateColumns: '7fr 5fr', gap: '30px', alignItems: 'start' }}>
         
-        {/* COLUMNA IZQUIERDA: INPUTS OPERATIVOS */}
+        {/* COLUMNA IZQUIERDA: MESA DE TRABAJO (60%) */}
         <div className="left-panel" style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
           
           {/* 1. Datos del Proyecto */}
@@ -687,13 +711,68 @@ function Bloque2_SSTT({
             </div>
           </div>
 
-          {/* 2. Catálogo y Selección */}
-          <div className="odoo-card" style={{ padding: '0', overflow: 'hidden' }}>
-            <div style={{ padding: '20px', borderBottom: '1px solid var(--border-color)' }}>
-              <h2 style={{ margin: 0 }}><Layout size={20} /> Catálogo y Selección</h2>
+          {/* 2. Carrito Técnico */}
+          <div className="odoo-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <h2 style={{ margin: 0 }}><Calculator size={20} /> Carrito Técnico</h2>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button className="primary-btn" onClick={() => setShowCatalogModal(true)} style={{ width: 'auto', padding: '8px 16px', background: '#3b82f6' }}>
+                  <Plus size={16} /> Añadir Equipos al Carrito
+                </button>
+                <button className="primary-btn" onClick={() => setShowAdHocModal(true)} style={{ width: 'auto', padding: '8px 16px', background: '#10b981' }}>
+                  <PackagePlus size={16} /> Ítem Ad-Hoc
+                </button>
+              </div>
             </div>
-            <div style={{ padding: '20px' }}>
-              <UnifilarConfigurator onAddToCart={handleAddToCartFromUnifilar} dbEquipments={maestroData} />
+            
+            <div style={{ maxHeight: '45vh', overflowY: 'auto', paddingRight: '5px' }}>
+              {resultadosCalculados.equiposProcesados.length === 0 ? (
+                <div style={{ padding: '40px 20px', textAlign: 'center', background: '#f1f5f9', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                  <PackagePlus size={32} color="#94a3b8" style={{ marginBottom: '10px' }} />
+                  <p style={{ color: 'var(--text-secondary)', margin: 0 }}>El carrito está vacío. Agrega equipos desde el catálogo.</p>
+                </div>
+              ) : (
+                resultadosCalculados.equiposProcesados.map(item => (
+                  <div key={item.id} className="cart-item" style={{ borderLeft: `4px solid ${item.overrides?.is_tercerizado ? '#a855f7' : 'var(--accent)'}`, background: '#ffffff', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', marginBottom: '0', borderRadius: '0' }}>
+                    <div className="cart-item-details" style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '8px' }}>
+                        <input 
+                          type="number" 
+                          value={item.cantidad} 
+                          min="1"
+                          onChange={(e) => updateQuantity(item.id, e.target.value)}
+                          style={{ width: '60px', padding: '6px', borderRadius: '4px' }}
+                        />
+                        <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
+                          x {item.equipo}
+                          {item.overrides && item.overrides.is_tercerizado && (
+                            <span style={{ fontSize: '0.7rem', background: '#a855f7', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>Tercerizado</span>
+                          )}
+                          {item.overrides && item.overrides.top_down_enabled && (
+                            <span style={{ fontSize: '0.7rem', background: '#10b981', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>Top-Down</span>
+                          )}
+                          {item.overrides && item.overrides.modoUso === 'Reserva' && (
+                            <span style={{ fontSize: '0.7rem', background: '#3b82f6', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>Reserva</span>
+                          )}
+                          {isItemModified(item) && (
+                            <span style={{ fontSize: '0.7rem', background: '#f59e0b', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>Modificado</span>
+                          )}
+                        </h4>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '0.9rem' }}>{item.tension} <span style={{ color: 'var(--border-color)', margin: '0 8px' }}>|</span> {item.overrides?.is_tercerizado ? 'Costo Subcontratista' : 'Costo Directo Total'}: {formatGs(item.costo_directo_unitario)}</p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span className="cart-item-price" style={{ fontSize: '1.2rem', color: 'var(--text-primary)' }}>{formatGs(item.precio_total_final)}</span>
+                      <button className="primary-btn" onClick={() => openEditModal(item)} style={{ padding: '8px', width: 'auto', background: '#f8fafc', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px' }} title="Editar Variables Base">
+                        <Edit2 size={16} />
+                      </button>
+                      <button className="remove-btn" onClick={() => removeItem(item.id)} style={{ padding: '8px', borderRadius: '6px' }}>
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -711,6 +790,20 @@ function Bloque2_SSTT({
                 <label>Días Permitidos (Corte)</label>
                 <input type="number" min="1" value={diasPermitidosCorte} onChange={(e) => { setDiasPermitidosCorte(parseInt(e.target.value) || 1); setIsDirty(true); }} />
               </div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '20px' }}>
+              <label>Condición de Trabajo / Ventana de Corte (Multiplicador de Riesgo)</label>
+              <select 
+                value={condicionTrabajo} 
+                onChange={(e) => { setCondicionTrabajo(parseFloat(e.target.value)); setIsDirty(true); }}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontWeight: 'bold' }}
+              >
+                <option value={1.0}>Normal / Obra Nueva (1.0x)</option>
+                <option value={1.2}>Ventana Nocturna Estándar (1.2x)</option>
+                <option value={1.5}>Ventana Crítica / Tiempo Restringido (1.5x)</option>
+                <option value={2.0}>Instalación Energizada (2.0x)</option>
+              </select>
             </div>
 
             {/* Modal Logistico Button */}
@@ -759,70 +852,11 @@ function Bloque2_SSTT({
           </div>
         </div>
 
-        {/* COLUMNA DERECHA: OUTPUTS FINANCIEROS */}
-        <div className="right-panel" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {/* COLUMNA DERECHA: WORKFLOW / CÁLCULO FINAL (40%) */}
+        <div className="right-panel" style={{ position: 'sticky', top: '16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
-          {/* Carrito Técnico */}
-          <div className="odoo-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h2 style={{ margin: 0 }}><Calculator size={20} /> Carrito Técnico</h2>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button className="primary-btn" onClick={() => setShowAdHocModal(true)} style={{ width: 'auto', padding: '8px 16px', background: '#10b981' }}>
-                  <PackagePlus size={16} /> Ítem Ad-Hoc
-                </button>
-              </div>
-            </div>
-            
-            <div style={{ maxHeight: '45vh', overflowY: 'auto', paddingRight: '5px' }}>
-              {resultadosCalculados.equiposProcesados.length === 0 ? (
-                <div style={{ padding: '40px 20px', textAlign: 'center', background: '#f1f5f9', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-                  <PackagePlus size={32} color="#94a3b8" style={{ marginBottom: '10px' }} />
-                  <p style={{ color: 'var(--text-secondary)', margin: 0 }}>El carrito está vacío. Agrega equipos desde el catálogo.</p>
-                </div>
-              ) : (
-                resultadosCalculados.equiposProcesados.map(item => (
-                  <div key={item.id} className="cart-item" style={{ borderLeft: `4px solid ${item.overrides?.is_tercerizado ? '#a855f7' : 'var(--accent)'}`, background: '#ffffff', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', marginBottom: '0', borderRadius: '0' }}>
-                    <div className="cart-item-details" style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '8px' }}>
-                        <input 
-                          type="number" 
-                          value={item.cantidad} 
-                          min="1"
-                          onChange={(e) => updateQuantity(item.id, e.target.value)}
-                          style={{ width: '60px', padding: '6px', borderRadius: '4px' }}
-                        />
-                        <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
-                          x {item.equipo}
-                          {item.overrides && item.overrides.is_tercerizado && (
-                            <span style={{ fontSize: '0.7rem', background: '#a855f7', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>Tercerizado</span>
-                          )}
-                          {item.overrides && item.overrides.top_down_enabled && (
-                            <span style={{ fontSize: '0.7rem', background: '#10b981', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>Top-Down</span>
-                          )}
-                          {isItemModified(item) && (
-                            <span style={{ fontSize: '0.7rem', background: '#f59e0b', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>Modificado</span>
-                          )}
-                        </h4>
-                      </div>
-                      <p style={{ margin: 0, fontSize: '0.9rem' }}>{item.tension} <span style={{ color: 'var(--border-color)', margin: '0 8px' }}>|</span> {item.overrides?.is_tercerizado ? 'Costo Subcontratista' : 'Costo Directo Total'}: {formatGs(item.costo_directo_unitario)}</p>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span className="cart-item-price" style={{ fontSize: '1.2rem', color: 'var(--text-primary)' }}>{formatGs(item.precio_total_final)}</span>
-                      <button className="primary-btn" onClick={() => openEditModal(item)} style={{ padding: '8px', width: 'auto', background: '#f8fafc', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px' }} title="Editar Variables Base">
-                        <Edit2 size={16} />
-                      </button>
-                      <button className="remove-btn" onClick={() => removeItem(item.id)} style={{ padding: '8px', borderRadius: '6px' }}>
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
           {/* CRM Financial Panel */}
-          <div style={{ position: 'sticky', top: '20px' }}>
+          <div>
             <CRMFinancialPanelV2 
               resultados={resultadosCalculados} 
               cotizacion={cotizacionGlobal} 
@@ -833,6 +867,13 @@ function Bloque2_SSTT({
 
         </div>
       </main>
+
+      <UnifilarConfigurator 
+        isOpen={showCatalogModal}
+        onClose={() => setShowCatalogModal(false)}
+        onAddToCart={handleAddToCartFromUnifilar} 
+        dbEquipments={maestroData} 
+      />
 
       <LogisticsModal 
         isOpen={showLogisticsModal} 

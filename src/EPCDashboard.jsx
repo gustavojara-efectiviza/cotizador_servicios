@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Bloque0_Setup from './Bloque0_Setup';
 import Bloque1_Procura from './Bloque1_Procura';
 import Bloque2_SSTT from './Bloque2_SSTT';
 import Bloque3_Resumen from './Bloque3_Resumen';
 import SavedQuotesPanel from './SavedQuotesPanel';
+import ZunzCopilot from './ZunzCopilot';
 import { upsertCotizacionV2 } from './services/dbService';
 import { auth } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -23,10 +24,14 @@ import {
   TrendingUp, 
   Sun, 
   Truck, 
-  Boxes
+  Boxes,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 export default function EPCDashboard() {
+  const copilotRef = useRef(null);
+
   // Authentication State
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -88,6 +93,7 @@ export default function EPCDashboard() {
   const [diasPermitidosCorte, setDiasPermitidosCorte] = useState(3);
   const [gastosImprevistos, setGastosImprevistos] = useState(0);
   const [margenImprevistosPorcentaje, setMargenImprevistosPorcentaje] = useState(0);
+  const [condicionTrabajo, setCondicionTrabajo] = useState(1.0);
 
   // Estado Global Bloque 0
   const [nombreCliente, setNombreCliente] = useState('');
@@ -103,6 +109,16 @@ export default function EPCDashboard() {
 
   // Estado del panel de cotizaciones guardadas
   const [showSavedQuotesPanel, setShowSavedQuotesPanel] = useState(false);
+
+  // Estado Colapsable UX TDAH
+  const [isBloque0Open, setIsBloque0Open] = useState(true);
+
+  // Auto-colapsar Bloque 0 al avanzar a otros bloques
+  useEffect(() => {
+    if (activeBlock > 1) {
+      setIsBloque0Open(false);
+    }
+  }, [activeBlock]);
 
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
@@ -133,7 +149,8 @@ export default function EPCDashboard() {
           distanciaKm,
           diasPermitidosCorte,
           gastosImprevistos,
-          margenImprevistosPorcentaje
+          margenImprevistosPorcentaje,
+          condicionTrabajo
         },
         totales: {
           totalProcura,
@@ -146,6 +163,9 @@ export default function EPCDashboard() {
       const returnedId = await upsertCotizacionV2(cotizacionId, dataToSave);
       setCotizacionId(returnedId);
       showToast(cotizacionId ? 'Borrador actualizado con éxito' : 'Borrador guardado exitosamente');
+      if (copilotRef.current) {
+        copilotRef.current.celebrarExito('¡Guardado impecable! Cotización asegurada en la DB.');
+      }
     } catch (error) {
       console.error(error);
       showToast('Error al intentar guardar la cotización.', 'error');
@@ -181,6 +201,7 @@ export default function EPCDashboard() {
     setDiasPermitidosCorte(sstt.diasPermitidosCorte ?? 3);
     setGastosImprevistos(sstt.gastosImprevistos ?? 0);
     setMargenImprevistosPorcentaje(sstt.margenImprevistosPorcentaje ?? 0);
+    setCondicionTrabajo(sstt.condicionTrabajo ?? 1.0);
 
     // Restaurar el ID para que el próximo guardado haga UPDATE, no INSERT
     setCotizacionId(quote.id || null);
@@ -273,7 +294,7 @@ export default function EPCDashboard() {
               </select>
             </div>
 
-            {/* Botón Guardar global persistente */}
+            {/* Botón Guardar global persistente (Fast Save) */}
             <button
               onClick={guardarCotizacionMaestra}
               disabled={isSaving}
@@ -283,15 +304,18 @@ export default function EPCDashboard() {
                 color: '#ffffff',
                 padding: '10px 20px',
                 borderRadius: '8px',
-                fontWeight: 700,
+                fontWeight: 800,
                 fontSize: '0.9rem',
                 cursor: isSaving ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                boxShadow: '0 2px 8px rgba(16,185,129,0.3)',
-                transition: 'all 0.2s'
+                boxShadow: isSaving ? 'none' : '0 4px 14px rgba(16,185,129,0.4)',
+                transition: 'all 0.2s',
+                transform: isSaving ? 'scale(0.98)' : 'scale(1)'
               }}
+              onMouseEnter={e => !isSaving && (e.currentTarget.style.transform = 'scale(1.02)')}
+              onMouseLeave={e => !isSaving && (e.currentTarget.style.transform = 'scale(1)')}
             >
               💾 {isSaving ? 'Guardando...' : 'Guardar Cotización'}
             </button>
@@ -325,7 +349,7 @@ export default function EPCDashboard() {
         {/* SWITCH INTERACTIVO DE PERFIL COMERCIAL */}
         <div style={{ 
           display: 'flex', 
-          justify: 'space-between', 
+          justifyContent: 'space-between', 
           alignItems: 'center', 
           background: '#f8fafc', 
           padding: '12px 20px', 
@@ -441,36 +465,49 @@ export default function EPCDashboard() {
       {/* 3. ÁREA PRINCIPAL CON RENDERIZADO SECUENCIAL DE LOS 3 BLOQUES */}
       <main style={{ padding: '30px 40px', maxWidth: '1400px', margin: '0 auto', width: '100%', flex: 1 }}>
         
-        <Bloque0_Setup
-          nombreCliente={nombreCliente}
-          setNombreCliente={setNombreCliente}
-          nombreProyecto={nombreProyecto}
-          setNombreProyecto={setNombreProyecto}
-          monedaTrabajo={monedaTrabajo}
-          setMonedaTrabajo={setMonedaTrabajo}
-          tipoCambioCompra={tipoCambioCompra}
-          setTipoCambioCompra={setTipoCambioCompra}
-          tipoCambioVenta={tipoCambioVenta}
-          setTipoCambioVenta={setTipoCambioVenta}
-        />
-        
-        {/* BANNER INFORMATIVO DE SECTOR */}
-        <div className="odoo-card" style={{ marginBottom: '25px', borderLeft: '4px solid #2563eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <RubroIcon size={28} color="#2563eb" />
-            <div>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a' }}>Sector Activo: {rubros[rubro].name}</h3>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>{rubros[rubro].detail}</p>
-            </div>
-          </div>
-          <span style={{ background: '#f1f5f9', padding: '6px 12px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>
-            Modo: {perfiles[perfilComercial].badge}
-          </span>
-        </div>
-
-        {/* BLOQUE 1: PROCURA & LANDED COST (COMPONENTIZADO) */}
+        {/* PASO 1: CONFIGURACIÓN Y PROCURA */}
         {activeBlock === 1 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            
+            {/* BLOQUE 0: SETUP */}
+            <div className="odoo-card" style={{ borderTop: '4px solid #1e293b' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                <div style={{ background: '#f1f5f9', padding: '6px', borderRadius: '6px' }}>
+                  <Sliders size={20} color="#475569" />
+                </div>
+                <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#1e293b', fontWeight: 700 }}>
+                  Configuración General del Proyecto
+                </h2>
+              </div>
+              <Bloque0_Setup
+                nombreCliente={nombreCliente}
+                setNombreCliente={setNombreCliente}
+                nombreProyecto={nombreProyecto}
+                setNombreProyecto={setNombreProyecto}
+                monedaTrabajo={monedaTrabajo}
+                setMonedaTrabajo={setMonedaTrabajo}
+                tipoCambioCompra={tipoCambioCompra}
+                setTipoCambioCompra={setTipoCambioCompra}
+                tipoCambioVenta={tipoCambioVenta}
+                setTipoCambioVenta={setTipoCambioVenta}
+              />
+            </div>
+            
+            {/* BANNER INFORMATIVO DE SECTOR */}
+            <div className="odoo-card" style={{ borderLeft: '4px solid #2563eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                <RubroIcon size={28} color="#2563eb" />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a' }}>Sector Activo: {rubros[rubro].name}</h3>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>{rubros[rubro].detail}</p>
+                </div>
+              </div>
+              <span style={{ background: '#f1f5f9', padding: '6px 12px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>
+                Modo: {perfiles[perfilComercial].badge}
+              </span>
+            </div>
+
+            {/* BLOQUE 1: PROCURA */}
             <Bloque1_Procura 
               equipos={equiposProcura}
               setEquipos={setEquiposProcura}
@@ -483,21 +520,23 @@ export default function EPCDashboard() {
               onGuardar={guardarCotizacionMaestra}
               isSaving={isSaving}
             />
+
+            {/* NAVEGACIÓN PASO 1 */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
               <button 
-                className="primary-btn" 
+                className="primary-btn animate-fade-in" 
                 onClick={() => setActiveBlock(2)}
-                style={{ width: 'auto', padding: '10px 24px', background: '#2563eb' }}
+                style={{ width: 'auto', padding: '12px 28px', background: '#2563eb', fontSize: '1.05rem', boxShadow: '0 4px 14px rgba(37,99,235,0.3)' }}
               >
-                Continuar al Bloque 2: Servicios SSTT <ChevronRight size={18} />
+                Siguiente: Servicios Técnicos (SSTT) <ChevronRight size={20} />
               </button>
             </div>
           </div>
         )}
 
-        {/* ESQUELETO BLOQUE 2: SERVICIOS & SSTT (CONTENEDOR V1 RESERVADO) */}
+        {/* PASO 2: SERVICIOS Y SSTT */}
         {activeBlock === 2 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div className="odoo-card" style={{ 
               background: '#ffffff', 
               border: '2px solid #3b82f6', 
@@ -525,7 +564,6 @@ export default function EPCDashboard() {
               
               <div style={{ margin: '20px 0' }}>
                 <Bloque2_SSTT 
-                  // DATOS ELEVADOS (Single Source of Truth — FASE 2)
                   cart={cartServicios}
                   setCart={setCartServicios}
                   alquileres={alquileresServicios}
@@ -538,7 +576,8 @@ export default function EPCDashboard() {
                   setGastosImprevistos={setGastosImprevistos}
                   margenImprevistosPorcentaje={margenImprevistosPorcentaje}
                   setMargenImprevistosPorcentaje={setMargenImprevistosPorcentaje}
-                  // CALLBACKS Y DATOS DE CONTEXTO
+                  condicionTrabajo={condicionTrabajo}
+                  setCondicionTrabajo={setCondicionTrabajo}
                   setTotalServicios={setTotalServicios} 
                   setDetalleServicios={setDetalleServicios} 
                   monedaTrabajo={monedaTrabajo}
@@ -550,29 +589,29 @@ export default function EPCDashboard() {
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
+              {/* NAVEGACIÓN PASO 2 */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '30px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
                 <button 
-                  className="primary-btn" 
                   onClick={() => setActiveBlock(1)}
-                  style={{ width: 'auto', padding: '10px 24px', background: '#64748b' }}
+                  style={{ background: 'transparent', border: 'none', color: '#64748b', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.95rem' }}
                 >
-                  Regresar a Bloque 1
+                  ← Atrás (Procura)
                 </button>
                 <button 
                   className="primary-btn" 
                   onClick={() => setActiveBlock(3)}
-                  style={{ width: 'auto', padding: '10px 24px', background: '#2563eb' }}
+                  style={{ width: 'auto', padding: '12px 28px', background: '#2563eb', fontSize: '1.05rem', boxShadow: '0 4px 14px rgba(37,99,235,0.3)' }}
                 >
-                  Continuar al Bloque 3: Consolidación <ChevronRight size={18} />
+                  Siguiente: Resumen de Cotización <ChevronRight size={20} />
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* BLOQUE 3: CONSOLIDACIÓN & RIESGOS (COMPONENTIZADO) */}
+        {/* PASO 3: CONSOLIDACIÓN Y EXPORTACIÓN */}
         {activeBlock === 3 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <Bloque3_Resumen 
               totalProcura={totalProcura} 
               totalServicios={totalServicios} 
@@ -582,14 +621,32 @@ export default function EPCDashboard() {
               monedaTrabajo={monedaTrabajo}
               onGuardar={guardarCotizacionMaestra}
               isSaving={isSaving}
+              copilotRef={copilotRef}
             />
-            <div style={{ marginTop: '15px', display: 'flex', justifyContent: 'flex-start' }}>
+            
+            {/* NAVEGACIÓN PASO 3 */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
+              <button 
+                onClick={() => setActiveBlock(2)}
+                style={{ background: 'transparent', border: 'none', color: '#64748b', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.95rem' }}
+              >
+                ← Atrás (Servicios Técnicos)
+              </button>
               <button 
                 className="primary-btn" 
-                onClick={() => setActiveBlock(2)}
-                style={{ width: 'auto', padding: '10px 24px', background: '#64748b' }}
+                onClick={guardarCotizacionMaestra}
+                disabled={isSaving}
+                style={{ 
+                  width: 'auto', 
+                  padding: '12px 30px', 
+                  background: '#10b981', 
+                  fontSize: '1.05rem', 
+                  boxShadow: '0 4px 14px rgba(16,185,129,0.4)',
+                  opacity: isSaving ? 0.7 : 1,
+                  cursor: isSaving ? 'not-allowed' : 'pointer'
+                }}
               >
-                Regresar a Bloque 2
+                💾 {isSaving ? 'Guardando...' : 'Finalizar y Guardar Cotización'}
               </button>
             </div>
           </div>
@@ -625,6 +682,9 @@ export default function EPCDashboard() {
           {toast.type === 'error' ? '❌' : '✅'} {toast.message}
         </div>
       )}
+
+      {/* COMPONENTE ZUNZ COPILOT (ADHD UX) */}
+      <ZunzCopilot ref={copilotRef} activeBlock={activeBlock} />
 
     </div>
   );

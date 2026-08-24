@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { fetchEquiposMaestros } from './services/dbService';
 import { 
   Globe, 
   Ship, 
@@ -14,7 +15,9 @@ import {
   FileText, 
   ArrowRightLeft, 
   Upload,
-  Boxes
+  Boxes,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -46,6 +49,9 @@ export default function Bloque1_Procura({
   // Estado para edición inline del tipo de cambio (reemplaza window.prompt)
   const [editandoCambio, setEditandoCambio] = useState(false);
   const [valorCambioTemp, setValorCambioTemp] = useState('');
+  
+  // Estado UX TDAH para el panel "Setea y Olvida"
+  const [isSeteaOpen, setIsSeteaOpen] = useState(false);
 
   // `defaults` y `equipos` son ahora props del EPCDashboard (Single Source of Truth).
   // Ver EPCDashboard.jsx → useState equiposProcura / procuraDefaults.
@@ -53,6 +59,19 @@ export default function Bloque1_Procura({
   // ESTADO DE MODAL DE ADICIÓN / EDICIÓN
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  
+  // CATÁLOGO FIREBASE
+  const [catalogoEquipos, setCatalogoEquipos] = useState([]);
+
+  useEffect(() => {
+    async function loadCatalog() {
+      const data = await fetchEquiposMaestros();
+      if (data && data.length > 0) {
+        setCatalogoEquipos(data);
+      }
+    }
+    loadCatalog();
+  }, []);
 
   const initialFormState = {
     nombre: '',
@@ -72,6 +91,29 @@ export default function Bloque1_Procura({
   };
 
   const [formData, setFormData] = useState(initialFormState);
+
+  // AUTO-COMPLETADO INTELIGENTE
+  const handleSeleccionEquipo = (nombreEquipoSeleccionado) => {
+    const equipoEncontrado = catalogoEquipos.find(
+      (eq) => eq.equipo.toLowerCase() === nombreEquipoSeleccionado.toLowerCase()
+    );
+
+    if (equipoEncontrado) {
+      setFormData(prev => ({
+        ...prev,
+        nombre: equipoEncontrado.equipo,
+        costoBase: equipoEncontrado.costo_total_base || 0,
+        // Si la base de datos tuviera ncm o arancel, lo autocompletamos aquí:
+        ...(equipoEncontrado.ncm ? { ncm: equipoEncontrado.ncm } : {}),
+        ...(equipoEncontrado.porcentajeArancel !== undefined ? { porcentajeArancel: equipoEncontrado.porcentajeArancel } : {})
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        nombre: nombreEquipoSeleccionado
+      }));
+    }
+  };
 
   // MANEJADOR DEL CAMBIO DE MONEDA VISUAL (sin window.prompt — input inline)
   const handleToggleMoneda = () => {
@@ -407,76 +449,100 @@ export default function Bloque1_Procura({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
       
-      {/* FASE 1: PANEL GLOBAL "SETEA Y OLVIDA" */}
-      <div className="odoo-card" style={{ background: '#ffffff', borderLeft: '4px solid #475569', padding: '16px' }}>
-        <h3 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', fontWeight: 700, color: '#475569', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          ⚙️ Panel de Variables Globales ("Setea y Olvida")
-        </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label style={{ fontSize: '0.78rem', color: '#64748b' }}>% Flete Base</label>
-            <input 
-              type="number" 
-              value={defaults.fleteBase} 
-              onChange={e => setDefaults({...defaults, fleteBase: parseFloat(e.target.value) || 0})}
-              style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
-            />
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label style={{ fontSize: '0.78rem', color: '#64748b' }}>% Seguro Base</label>
-            <input 
-              type="number" 
-              value={defaults.seguroBase} 
-              onChange={e => setDefaults({...defaults, seguroBase: parseFloat(e.target.value) || 0})}
-              style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
-            />
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label style={{ fontSize: '0.78rem', color: '#64748b' }}>% Despacho</label>
-            <input 
-              type="number" 
-              value={defaults.despachoBase} 
-              onChange={e => setDefaults({...defaults, despachoBase: parseFloat(e.target.value) || 0})}
-              style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
-            />
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label style={{ fontSize: '0.78rem', color: '#64748b' }}>% Financiero</label>
-            <input 
-              type="number" 
-              value={defaults.financieroBase} 
-              onChange={e => setDefaults({...defaults, financieroBase: parseFloat(e.target.value) || 0})}
-              style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
-            />
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label style={{ fontSize: '0.78rem', color: '#64748b' }}>% Administrativo</label>
-            <input 
-              type="number" 
-              value={defaults.adminBase} 
-              onChange={e => setDefaults({...defaults, adminBase: parseFloat(e.target.value) || 0})}
-              style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
-            />
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label style={{ fontSize: '0.78rem', color: '#64748b' }}>Arancel Defecto (%)</label>
-            <input 
-              type="number" 
-              value={defaults.arancelBase} 
-              onChange={e => setDefaults({...defaults, arancelBase: parseFloat(e.target.value) || 0})}
-              style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
-            />
-          </div>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label style={{ fontSize: '0.78rem', color: '#64748b' }}>Margen Global (%)</label>
-            <input 
-              type="number" 
-              value={defaults.margenBase} 
-              onChange={e => setDefaults({...defaults, margenBase: parseFloat(e.target.value) || 0})}
-              style={{ padding: '6px 10px', fontSize: '0.85rem', fontWeight: 'bold', color: '#2563eb' }} 
-            />
+      {/* FASE 1: PANEL GLOBAL "SETEA Y OLVIDA" (Colapsable) */}
+      <div className="odoo-card" style={{ background: '#ffffff', borderLeft: '4px solid #475569', padding: '0' }}>
+        <div 
+          onClick={() => setIsSeteaOpen(!isSeteaOpen)}
+          style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            padding: '16px', 
+            cursor: 'pointer',
+            userSelect: 'none' 
+          }}
+        >
+          <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#475569', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            ⚙️ Panel de Variables Globales ("Setea y Olvida")
+          </h3>
+          <div style={{ color: '#64748b' }}>
+            {isSeteaOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
           </div>
         </div>
+
+        {isSeteaOpen && (
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', 
+            gap: '12px', 
+            padding: '0 16px 16px 16px',
+            borderTop: '1px solid #f1f5f9' 
+          }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: '0.78rem', color: '#64748b' }}>% Flete Base</label>
+              <input 
+                type="number" 
+                value={defaults.fleteBase} 
+                onChange={e => setDefaults({...defaults, fleteBase: parseFloat(e.target.value) || 0})}
+                style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
+              />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: '0.78rem', color: '#64748b' }}>% Seguro Base</label>
+              <input 
+                type="number" 
+                value={defaults.seguroBase} 
+                onChange={e => setDefaults({...defaults, seguroBase: parseFloat(e.target.value) || 0})}
+                style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
+              />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: '0.78rem', color: '#64748b' }}>% Despacho</label>
+              <input 
+                type="number" 
+                value={defaults.despachoBase} 
+                onChange={e => setDefaults({...defaults, despachoBase: parseFloat(e.target.value) || 0})}
+                style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
+              />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: '0.78rem', color: '#64748b' }}>% Financiero</label>
+              <input 
+                type="number" 
+                value={defaults.financieroBase} 
+                onChange={e => setDefaults({...defaults, financieroBase: parseFloat(e.target.value) || 0})}
+                style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
+              />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: '0.78rem', color: '#64748b' }}>% Administrativo</label>
+              <input 
+                type="number" 
+                value={defaults.adminBase} 
+                onChange={e => setDefaults({...defaults, adminBase: parseFloat(e.target.value) || 0})}
+                style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
+              />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: '0.78rem', color: '#64748b' }}>Arancel Defecto (%)</label>
+              <input 
+                type="number" 
+                value={defaults.arancelBase} 
+                onChange={e => setDefaults({...defaults, arancelBase: parseFloat(e.target.value) || 0})}
+                style={{ padding: '6px 10px', fontSize: '0.85rem' }} 
+              />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: '0.78rem', color: '#64748b' }}>Margen Global (%)</label>
+              <input 
+                type="number" 
+                value={defaults.margenBase} 
+                onChange={e => setDefaults({...defaults, margenBase: parseFloat(e.target.value) || 0})}
+                style={{ padding: '6px 10px', fontSize: '0.85rem', fontWeight: 'bold', color: '#2563eb' }} 
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* CONTROLES DEL PANEL DE PROCURA */}
@@ -773,13 +839,21 @@ export default function Bloque1_Procura({
               <h4 style={{ margin: '0 0 12px 0', color: '#1e40af', fontSize: '0.9rem' }}>1. Configuración Básica del Suministro</h4>
               <div className="config-grid" style={{ marginBottom: '12px' }}>
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label>Nombre del Equipo</label>
+                  <label>Nombre del Equipo (Catálogo Maestro o Manual)</label>
                   <input 
+                    list="catalogo-equipos-maestros"
                     type="text" 
                     placeholder="Ej: Transformador 80MVA" 
                     value={formData.nombre} 
-                    onChange={e => setFormData({ ...formData, nombre: e.target.value })} 
+                    onChange={e => handleSeleccionEquipo(e.target.value)} 
                   />
+                  <datalist id="catalogo-equipos-maestros">
+                    {catalogoEquipos.map(eq => (
+                      <option key={eq.id} value={eq.equipo}>
+                        {eq.equipo} ({eq.tension || 'N/A'})
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label>Modalidad de Compra</label>
