@@ -169,24 +169,23 @@ export default function EPCDashboard() {
     setTipoCambioCompra(dg.tipoCambioCompra || 7400);
     setTipoCambioVenta(dg.tipoCambioVenta || 7500);
 
-    // --- Procura (Bloque 1) — Elevado en FASE 1 ---
-    if (Array.isArray(quote.detalleProcura) && quote.detalleProcura.length > 0) {
-      setEquiposProcura(quote.detalleProcura);
-    }
+    // --- Procura (Bloque 1) ---
+    const procuraList = quote.detalleProcura || quote.equiposProcura || quote.procura || [];
+    setEquiposProcura(Array.isArray(procuraList) ? procuraList : []);
 
-    // --- Servicios SSTT (Bloque 2) — Elevado en FASE 2 ---
+    // --- Servicios SSTT (Bloque 2) ---
     const sstt = quote.serviciosSST || {};
-    if (Array.isArray(sstt.cart) && sstt.cart.length > 0) {
-      setCartServicios(sstt.cart);
-    }
-    if (Array.isArray(sstt.alquileres)) {
-      setAlquileresServicios(sstt.alquileres);
-    }
-    setDistanciaKm(sstt.distanciaKm ?? 100);
-    setDiasPermitidosCorte(sstt.diasPermitidosCorte ?? 3);
-    setGastosImprevistos(sstt.gastosImprevistos ?? 0);
-    setMargenImprevistosPorcentaje(sstt.margenImprevistosPorcentaje ?? 0);
-    setCondicionTrabajo(sstt.condicionTrabajo ?? 1.0);
+    const cartList = sstt.cart || quote.cart || quote.equiposCotizados || quote.detalleServicios || quote.servicios || [];
+    setCartServicios(Array.isArray(cartList) ? cartList : []);
+
+    const alqList = sstt.alquileres || quote.alquileres || [];
+    setAlquileresServicios(Array.isArray(alqList) ? alqList : []);
+
+    setDistanciaKm(sstt.distanciaKm ?? quote.Distancia_Ida_Vuelta_km ?? 100);
+    setDiasPermitidosCorte(sstt.diasPermitidosCorte ?? quote.Dias_Permitidos_Corte ?? 3);
+    setGastosImprevistos(sstt.gastosImprevistos ?? quote.Gastos_Imprevistos ?? 0);
+    setMargenImprevistosPorcentaje(sstt.margenImprevistosPorcentaje ?? quote.Margen_Imprevistos_Porcentaje ?? 0);
+    setCondicionTrabajo(sstt.condicionTrabajo ?? quote.condicionTrabajo ?? 1.0);
 
     // Restaurar el ID para que el próximo guardado haga UPDATE, no INSERT
     setCotizacionId(quote.id || null);
