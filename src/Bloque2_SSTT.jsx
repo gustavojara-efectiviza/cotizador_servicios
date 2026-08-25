@@ -29,6 +29,7 @@ function Bloque2_SSTT({
   // CALLBACKS AL PADRE
   setTotalServicios,
   setDetalleServicios,
+  setResultadosSSTT,
   monedaTrabajo = 'USD',
   tipoCambio = 7500,
   nombreCliente = '',
@@ -75,8 +76,11 @@ function Bloque2_SSTT({
   const [showCatalogModal, setShowCatalogModal] = useState(false);
   const [showAdHocModal, setShowAdHocModal] = useState(false);
   const [adHocState, setAdHocState] = useState({
-    equipo: '', tension: '500 kV', horas_equipo: 4, interno: 1, ayudante: 1, externo: 0,
+    equipo: '', tension: '500 kV', horas_equipo: 4, horas_servicio: 4, interno: 1, ayudante: 1, externo: 0,
     costo_total_base: 0, is_tercerizado: false, margen_tercerizado: 30, saveToDb: false,
+    modo_subcontrato: 'fijo', // 'fijo' | 'jornal'
+    sub_esp_cant: 1, sub_esp_costo_dia: 450000, sub_esp_dias: 1,
+    sub_aux_cant: 1, sub_aux_costo_dia: 250000, sub_aux_dias: 1,
     categoria: 'zona_otros', costoServiceFee: 0, margenServiceFee: 0, costoAmortizacion: 0, margenAmortizacion: 0
   });
 
@@ -211,12 +215,20 @@ function Bloque2_SSTT({
     setEditingItem(item.id);
     setOverrideState({
       horas_equipo: item.overrides?.horas_equipo ?? item.baseData?.horas_equipo ?? 4,
+      horas_servicio: item.overrides?.horas_servicio ?? item.baseData?.horas_servicio ?? item.overrides?.horas_equipo ?? item.baseData?.horas_equipo ?? 4,
       interno: item.overrides?.interno ?? item.baseData?.interno ?? 1,
       ayudante: item.overrides?.ayudante ?? item.baseData?.ayudante ?? 1,
       externo: item.overrides?.externo ?? item.baseData?.externo ?? 0,
       costo_total_base: item.overrides?.costo_total_base ?? item.baseData?.costo_total_base ?? 0,
       is_tercerizado: item.overrides?.is_tercerizado ?? false,
       margen_tercerizado: item.overrides?.margen_tercerizado ?? 30,
+      modo_subcontrato: item.overrides?.modo_subcontrato ?? 'fijo',
+      sub_esp_cant: item.overrides?.sub_esp_cant ?? 1,
+      sub_esp_costo_dia: item.overrides?.sub_esp_costo_dia ?? 450000,
+      sub_esp_dias: item.overrides?.sub_esp_dias ?? 1,
+      sub_aux_cant: item.overrides?.sub_aux_cant ?? 1,
+      sub_aux_costo_dia: item.overrides?.sub_aux_costo_dia ?? 250000,
+      sub_aux_dias: item.overrides?.sub_aux_dias ?? 1,
       top_down_enabled: item.overrides?.top_down_enabled ?? false,
       valor_inyectado: item.overrides?.valor_inyectado ?? 0,
       costoServiceFee: item.overrides?.costoServiceFee ?? 0,
@@ -232,8 +244,14 @@ function Bloque2_SSTT({
   };
 
   const saveOverrides = () => {
+    const costoSubcontratoEfectivo = overrideState.is_tercerizado && overrideState.modo_subcontrato === 'jornal'
+      ? ((Number(overrideState.sub_esp_cant) || 0) * (Number(overrideState.sub_esp_costo_dia) || 0) * (Number(overrideState.sub_esp_dias) || 0)) +
+        ((Number(overrideState.sub_aux_cant) || 0) * (Number(overrideState.sub_aux_costo_dia) || 0) * (Number(overrideState.sub_aux_dias) || 0))
+      : Number(overrideState.costo_total_base) || 0;
+
     const finalOverrides = {
       ...overrideState,
+      costo_total_base: overrideState.is_tercerizado ? costoSubcontratoEfectivo : overrideState.costo_total_base,
       top_down_enabled: overrideState.is_tercerizado ? false : overrideState.top_down_enabled,
       is_tercerizado: overrideState.top_down_enabled ? false : overrideState.is_tercerizado
     };
@@ -249,14 +267,20 @@ function Bloque2_SSTT({
   const handleSaveAdHoc = async () => {
     if (!adHocState.equipo) return alert("Ingresa un nombre para el equipo.");
     
+    const costoSubcontratoEfectivo = adHocState.is_tercerizado && adHocState.modo_subcontrato === 'jornal'
+      ? ((Number(adHocState.sub_esp_cant) || 0) * (Number(adHocState.sub_esp_costo_dia) || 0) * (Number(adHocState.sub_esp_dias) || 0)) +
+        ((Number(adHocState.sub_aux_cant) || 0) * (Number(adHocState.sub_aux_costo_dia) || 0) * (Number(adHocState.sub_aux_dias) || 0))
+      : Number(adHocState.costo_total_base) || 0;
+
     const baseData = {
       equipo: adHocState.equipo, 
       tension: adHocState.tension, 
       horas_equipo: adHocState.horas_equipo,
+      horas_servicio: adHocState.horas_servicio,
       interno: adHocState.interno, 
       ayudante: adHocState.ayudante, 
       externo: adHocState.externo,
-      costo_total_base: adHocState.costo_total_base,
+      costo_total_base: costoSubcontratoEfectivo,
       categoria: adHocState.categoria || 'zona_otros'
     };
 
@@ -274,7 +298,16 @@ function Bloque2_SSTT({
       baseData: structuredClone(baseData),
       overrides: structuredClone({
         is_tercerizado: adHocState.is_tercerizado,
-        costo_total_base: adHocState.costo_total_base,
+        horas_equipo: adHocState.horas_equipo,
+        horas_servicio: adHocState.horas_servicio,
+        modo_subcontrato: adHocState.modo_subcontrato,
+        sub_esp_cant: Number(adHocState.sub_esp_cant) || 0,
+        sub_esp_costo_dia: Number(adHocState.sub_esp_costo_dia) || 0,
+        sub_esp_dias: Number(adHocState.sub_esp_dias) || 0,
+        sub_aux_cant: Number(adHocState.sub_aux_cant) || 0,
+        sub_aux_costo_dia: Number(adHocState.sub_aux_costo_dia) || 0,
+        sub_aux_dias: Number(adHocState.sub_aux_dias) || 0,
+        costo_total_base: costoSubcontratoEfectivo,
         margen_tercerizado: adHocState.margen_tercerizado,
         costoServiceFee: adHocState.costoServiceFee,
         margenServiceFee: adHocState.margenServiceFee,
@@ -303,7 +336,7 @@ function Bloque2_SSTT({
   };
 
   // Calculations
-  const totalEsfuerzoHoras = cart.reduce((sum, item) => sum + (item.cantidad * (item.overrides?.horas_equipo ?? item.baseData.horas_equipo ?? 0)), 0);
+  const totalEsfuerzoHoras = cart.reduce((sum, item) => sum + (item.cantidad * (item.overrides?.horas_servicio ?? item.overrides?.horas_equipo ?? item.baseData?.horas_servicio ?? item.baseData?.horas_equipo ?? 0)), 0);
 
   // Generar Cotización Consolidada para el Motor y el Panel Derecho
   const cotizacionGlobal = {
@@ -336,7 +369,10 @@ function Bloque2_SSTT({
     if (setDetalleServicios) {
       setDetalleServicios(resultadosCalculados?.equiposProcesados || []);
     }
-  }, [totalCostoTecnico, resultadosCalculados?.equiposProcesados, setTotalServicios, setDetalleServicios]);
+    if (setResultadosSSTT) {
+      setResultadosSSTT(resultadosCalculados);
+    }
+  }, [totalCostoTecnico, resultadosCalculados, setTotalServicios, setDetalleServicios, setResultadosSSTT]);
 
   const formatGs = (num) => {
     return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG' }).format(num);
@@ -415,10 +451,17 @@ function Bloque2_SSTT({
                     <td colSpan="3" style={{ padding: '10px', fontWeight: 'bold', color: 'var(--text-primary)', background: '#f1f5f9' }}>Métricas Operativas</td>
                   </tr>
                   <tr>
-                    <td style={{ padding: '10px' }}>Horas Equipo</td>
+                    <td style={{ padding: '10px' }}>Horas Equipo (Uso de Tecnología)</td>
                     <td style={{ padding: '10px', color: '#64748b' }}>{item.baseData.horas_equipo ?? 4}</td>
                     <td style={{ padding: '10px' }}>
                       <input type="number" step="0.5" value={overrideState.horas_equipo} onChange={(e) => setOverrideState({...overrideState, horas_equipo: parseFloat(e.target.value)||0})} style={{ width: '100px' }} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '10px' }}>Horas de Servicio (Personal)</td>
+                    <td style={{ padding: '10px', color: '#64748b' }}>{item.baseData?.horas_servicio ?? item.baseData?.horas_equipo ?? 4}</td>
+                    <td style={{ padding: '10px' }}>
+                      <input type="number" step="0.5" value={overrideState.horas_servicio} onChange={(e) => setOverrideState({...overrideState, horas_servicio: parseFloat(e.target.value)||0})} style={{ width: '100px' }} />
                     </td>
                   </tr>
                   {!overrideState.is_tercerizado && (
@@ -454,12 +497,152 @@ function Bloque2_SSTT({
                   {overrideState.is_tercerizado ? (
                     <>
                       <tr>
-                        <td style={{ padding: '10px' }}>Costo Subcontratista (Gs)</td>
-                        <td style={{ padding: '10px', color: '#64748b' }}>{formatGs(item.baseData.costo_total_base ?? 0)}</td>
-                        <td style={{ padding: '10px' }}>
-                          <input type="number" value={overrideState.costo_total_base} onChange={(e) => setOverrideState({...overrideState, costo_total_base: parseFloat(e.target.value)||0})} style={{ width: '150px' }} />
+                        <td style={{ padding: '10px' }}>Modalidad de Subcontrato</td>
+                        <td colSpan="2" style={{ padding: '10px' }}>
+                          <div style={{ display: 'flex', gap: '10px' }}>
+                            <button 
+                              type="button"
+                              onClick={() => setOverrideState({...overrideState, modo_subcontrato: 'fijo'})}
+                              style={{
+                                padding: '6px 14px',
+                                borderRadius: '6px',
+                                border: '1px solid',
+                                borderColor: overrideState.modo_subcontrato === 'fijo' ? '#a855f7' : '#cbd5e1',
+                                background: overrideState.modo_subcontrato === 'fijo' ? '#f3e8ff' : '#ffffff',
+                                color: overrideState.modo_subcontrato === 'fijo' ? '#7e22ce' : '#64748b',
+                                fontWeight: 700,
+                                fontSize: '0.85rem',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Suma Alzada (Monto Fijo)
+                            </button>
+                            <button 
+                              type="button"
+                              onClick={() => setOverrideState({...overrideState, modo_subcontrato: 'jornal'})}
+                              style={{
+                                padding: '6px 14px',
+                                borderRadius: '6px',
+                                border: '1px solid',
+                                borderColor: overrideState.modo_subcontrato === 'jornal' ? '#a855f7' : '#cbd5e1',
+                                background: overrideState.modo_subcontrato === 'jornal' ? '#f3e8ff' : '#ffffff',
+                                color: overrideState.modo_subcontrato === 'jornal' ? '#7e22ce' : '#64748b',
+                                fontWeight: 700,
+                                fontSize: '0.85rem',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Por Jornal (Especialista + Auxiliar)
+                            </button>
+                          </div>
                         </td>
                       </tr>
+
+                      {overrideState.modo_subcontrato === 'jornal' ? (
+                        <tr>
+                          <td colSpan="3" style={{ padding: '12px', background: '#faf5ff', borderRadius: '8px', border: '1px dashed #d8b4fe' }}>
+                            <div style={{ marginBottom: '10px', fontWeight: 700, color: '#7e22ce', fontSize: '0.9rem' }}>
+                              Desglose de Personal Subcontratado
+                            </div>
+                            
+                            {/* Especialista */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>Téc. Especialista:</span>
+                              <div>
+                                <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block' }}>Cant. Pers.</label>
+                                <input 
+                                  type="number" 
+                                  min="0"
+                                  value={overrideState.sub_esp_cant} 
+                                  onChange={e => setOverrideState({...overrideState, sub_esp_cant: parseInt(e.target.value) || 0})}
+                                  style={{ width: '100%', padding: '6px' }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block' }}>Gs. / Día</label>
+                                <input 
+                                  type="number" 
+                                  step="10000"
+                                  value={overrideState.sub_esp_costo_dia} 
+                                  onChange={e => setOverrideState({...overrideState, sub_esp_costo_dia: parseFloat(e.target.value) || 0})}
+                                  style={{ width: '100%', padding: '6px' }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block' }}>Días</label>
+                                <input 
+                                  type="number" 
+                                  step="0.5"
+                                  value={overrideState.sub_esp_dias} 
+                                  onChange={e => setOverrideState({...overrideState, sub_esp_dias: parseFloat(e.target.value) || 0})}
+                                  style={{ width: '100%', padding: '6px' }}
+                                />
+                              </div>
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: '#64748b', textAlign: 'right', marginBottom: '12px' }}>
+                              Subtotal Especialistas: <strong>{formatGs((overrideState.sub_esp_cant || 0) * (overrideState.sub_esp_costo_dia || 0) * (overrideState.sub_esp_dias || 0))}</strong>
+                            </div>
+
+                            {/* Auxiliar */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#334155' }}>Téc. Auxiliar / Ayudante:</span>
+                              <div>
+                                <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block' }}>Cant. Pers.</label>
+                                <input 
+                                  type="number" 
+                                  min="0"
+                                  value={overrideState.sub_aux_cant} 
+                                  onChange={e => setOverrideState({...overrideState, sub_aux_cant: parseInt(e.target.value) || 0})}
+                                  style={{ width: '100%', padding: '6px' }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block' }}>Gs. / Día</label>
+                                <input 
+                                  type="number" 
+                                  step="10000"
+                                  value={overrideState.sub_aux_costo_dia} 
+                                  onChange={e => setOverrideState({...overrideState, sub_aux_costo_dia: parseFloat(e.target.value) || 0})}
+                                  style={{ width: '100%', padding: '6px' }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.75rem', color: '#64748b', display: 'block' }}>Días</label>
+                                <input 
+                                  type="number" 
+                                  step="0.5"
+                                  value={overrideState.sub_aux_dias} 
+                                  onChange={e => setOverrideState({...overrideState, sub_aux_dias: parseFloat(e.target.value) || 0})}
+                                  style={{ width: '100%', padding: '6px' }}
+                                />
+                              </div>
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: '#64748b', textAlign: 'right', marginBottom: '12px' }}>
+                              Subtotal Auxiliares: <strong>{formatGs((overrideState.sub_aux_cant || 0) * (overrideState.sub_aux_costo_dia || 0) * (overrideState.sub_aux_dias || 0))}</strong>
+                            </div>
+
+                            {/* Total Subcontratista Calculado */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f3e8ff', padding: '8px 12px', borderRadius: '6px' }}>
+                              <span style={{ fontWeight: 700, color: '#7e22ce', fontSize: '0.9rem' }}>Costo Total Subcontratista Calculado:</span>
+                              <span style={{ fontWeight: 800, color: '#581c87', fontSize: '1.05rem' }}>
+                                {formatGs(
+                                  ((overrideState.sub_esp_cant || 0) * (overrideState.sub_esp_costo_dia || 0) * (overrideState.sub_esp_dias || 0)) +
+                                  ((overrideState.sub_aux_cant || 0) * (overrideState.sub_aux_costo_dia || 0) * (overrideState.sub_aux_dias || 0))
+                                )}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        <tr>
+                          <td style={{ padding: '10px' }}>Costo Subcontratista (Gs)</td>
+                          <td style={{ padding: '10px', color: '#64748b' }}>{formatGs(item.baseData.costo_total_base ?? 0)}</td>
+                          <td style={{ padding: '10px' }}>
+                            <input type="number" value={overrideState.costo_total_base} onChange={(e) => setOverrideState({...overrideState, costo_total_base: parseFloat(e.target.value)||0})} style={{ width: '150px' }} />
+                          </td>
+                        </tr>
+                      )}
+
                       <tr>
                         <td style={{ padding: '10px', color: '#a855f7', fontWeight: 'bold' }}>Margen de Ganancia (%)</td>
                         <td style={{ padding: '10px', color: '#64748b' }}>N/A</td>
@@ -477,17 +660,17 @@ function Bloque2_SSTT({
                             <span>{formatGs((overrideState.horas_equipo ?? 4) * TARIFA_EQUIPOS_HORA)}</span>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                            <span>Mano de Obra (Esp): {((overrideState.horas_equipo ?? 4)/8).toFixed(2)}d × {overrideState.interno ?? 1} × Gs. {formatGs(COSTO_ESPECIALISTA_DIA).replace('Gs.', '').trim()}</span>
-                            <span>{formatGs(((overrideState.horas_equipo ?? 4)/8) * (overrideState.interno ?? 1) * COSTO_ESPECIALISTA_DIA)}</span>
+                            <span>Mano de Obra (Esp): {(((overrideState.horas_servicio ?? overrideState.horas_equipo ?? 4))/8).toFixed(2)}d × {overrideState.interno ?? 1} × Gs. {formatGs(COSTO_ESPECIALISTA_DIA).replace('Gs.', '').trim()}</span>
+                            <span>{formatGs((((overrideState.horas_servicio ?? overrideState.horas_equipo ?? 4))/8) * (overrideState.interno ?? 1) * COSTO_ESPECIALISTA_DIA)}</span>
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', Math: '8px' }}>
-                            <span>Mano de Obra (Aux): {((overrideState.horas_equipo ?? 4)/8).toFixed(2)}d × {overrideState.ayudante ?? 1} × Gs. {formatGs(COSTO_AUXILIAR_DIA).replace('Gs.', '').trim()}</span>
-                            <span>{formatGs(((overrideState.horas_equipo ?? 4)/8) * (overrideState.ayudante ?? 1) * COSTO_AUXILIAR_DIA)}</span>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <span>Mano de Obra (Aux): {(((overrideState.horas_servicio ?? overrideState.horas_equipo ?? 4))/8).toFixed(2)}d × {overrideState.ayudante ?? 1} × Gs. {formatGs(COSTO_AUXILIAR_DIA).replace('Gs.', '').trim()}</span>
+                            <span>{formatGs((((overrideState.horas_servicio ?? overrideState.horas_equipo ?? 4))/8) * (overrideState.ayudante ?? 1) * COSTO_AUXILIAR_DIA)}</span>
                           </div>
                           {(overrideState.externo > 0) && (
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span>Mano de Obra (Ext): {((overrideState.horas_equipo ?? 4)/8).toFixed(2)}d × {overrideState.externo} × Gs. {formatGs(COSTO_EXTERNO_DIA).replace('Gs.', '').trim()}</span>
-                              <span>{formatGs(((overrideState.horas_equipo ?? 4)/8) * (overrideState.externo) * COSTO_EXTERNO_DIA)}</span>
+                              <span>Mano de Obra (Ext): {(((overrideState.horas_servicio ?? overrideState.horas_equipo ?? 4))/8).toFixed(2)}d × {overrideState.externo} × Gs. {formatGs(COSTO_EXTERNO_DIA).replace('Gs.', '').trim()}</span>
+                              <span>{formatGs((((overrideState.horas_servicio ?? overrideState.horas_equipo ?? 4))/8) * (overrideState.externo) * COSTO_EXTERNO_DIA)}</span>
                             </div>
                           )}
                         </td>
@@ -495,10 +678,10 @@ function Bloque2_SSTT({
                       <tr>
                         <td style={{ padding: '10px', fontWeight: 'bold' }}>Costo Técnico Calculado (Gs.)</td>
                         <td style={{ padding: '10px', color: '#64748b' }}>
-                          {formatGs((item.baseData.horas_equipo ?? 4) * TARIFA_EQUIPOS_HORA + ((item.baseData.horas_equipo ?? 4) / 8) * (item.baseData.interno ?? 1) * COSTO_ESPECIALISTA_DIA + ((item.baseData.horas_equipo ?? 4) / 8) * (item.baseData.ayudante ?? 1) * COSTO_AUXILIAR_DIA)}
+                          {formatGs((item.baseData.horas_equipo ?? 4) * TARIFA_EQUIPOS_HORA + ((item.baseData.horas_servicio ?? item.baseData.horas_equipo ?? 4) / 8) * (item.baseData.interno ?? 1) * COSTO_ESPECIALISTA_DIA + ((item.baseData.horas_servicio ?? item.baseData.horas_equipo ?? 4) / 8) * (item.baseData.ayudante ?? 1) * COSTO_AUXILIAR_DIA)}
                         </td>
                         <td style={{ padding: '10px', color: '#38bdf8', fontWeight: 'bold' }}>
-                          {formatGs((overrideState.horas_equipo ?? 4) * TARIFA_EQUIPOS_HORA + ((overrideState.horas_equipo ?? 4) / 8) * (overrideState.interno ?? 1) * COSTO_ESPECIALISTA_DIA + ((overrideState.horas_equipo ?? 4) / 8) * (overrideState.ayudante ?? 1) * COSTO_AUXILIAR_DIA)}
+                          {formatGs((overrideState.horas_equipo ?? 4) * TARIFA_EQUIPOS_HORA + ((overrideState.horas_servicio ?? overrideState.horas_equipo ?? 4) / 8) * (overrideState.interno ?? 1) * COSTO_ESPECIALISTA_DIA + ((overrideState.horas_servicio ?? overrideState.horas_equipo ?? 4) / 8) * (overrideState.ayudante ?? 1) * COSTO_AUXILIAR_DIA)}
                         </td>
                       </tr>
                     </>
@@ -613,8 +796,12 @@ function Bloque2_SSTT({
             <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', marginBottom: '20px' }}>
               <tbody>
                 <tr>
-                  <td style={{ padding: '8px' }}>Horas Equipo</td>
+                  <td style={{ padding: '8px' }}>Horas Equipo (Tecnología)</td>
                   <td><input type="number" step="0.5" value={adHocState.horas_equipo} onChange={e => setAdHocState({...adHocState, horas_equipo: parseFloat(e.target.value)||0})} /></td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '8px' }}>Horas de Servicio (Personal)</td>
+                  <td><input type="number" step="0.5" value={adHocState.horas_servicio} onChange={e => setAdHocState({...adHocState, horas_servicio: parseFloat(e.target.value)||0})} /></td>
                 </tr>
                 {!adHocState.is_tercerizado && (
                   <>
@@ -626,9 +813,142 @@ function Bloque2_SSTT({
                 {adHocState.is_tercerizado && (
                   <>
                     <tr>
-                      <td style={{ padding: '8px' }}>Costo Subcontratista (Gs)</td>
-                      <td><input type="number" value={adHocState.costo_total_base} onChange={e => setAdHocState({...adHocState, costo_total_base: parseFloat(e.target.value)||0})} /></td>
+                      <td style={{ padding: '8px' }}>Modalidad Subcontrato</td>
+                      <td style={{ padding: '8px' }}>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button 
+                            type="button"
+                            onClick={() => setAdHocState({...adHocState, modo_subcontrato: 'fijo'})}
+                            style={{
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              border: '1px solid',
+                              borderColor: adHocState.modo_subcontrato === 'fijo' ? '#a855f7' : '#cbd5e1',
+                              background: adHocState.modo_subcontrato === 'fijo' ? '#f3e8ff' : '#ffffff',
+                              color: adHocState.modo_subcontrato === 'fijo' ? '#7e22ce' : '#64748b',
+                              fontWeight: 700,
+                              fontSize: '0.8rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Suma Alzada
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => setAdHocState({...adHocState, modo_subcontrato: 'jornal'})}
+                            style={{
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              border: '1px solid',
+                              borderColor: adHocState.modo_subcontrato === 'jornal' ? '#a855f7' : '#cbd5e1',
+                              background: adHocState.modo_subcontrato === 'jornal' ? '#f3e8ff' : '#ffffff',
+                              color: adHocState.modo_subcontrato === 'jornal' ? '#7e22ce' : '#64748b',
+                              fontWeight: 700,
+                              fontSize: '0.8rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Por Jornal (Personal)
+                          </button>
+                        </div>
+                      </td>
                     </tr>
+
+                    {adHocState.modo_subcontrato === 'jornal' ? (
+                      <tr>
+                        <td colSpan="2" style={{ padding: '10px', background: '#faf5ff', borderRadius: '8px', border: '1px dashed #d8b4fe' }}>
+                          <div style={{ marginBottom: '8px', fontWeight: 700, color: '#7e22ce', fontSize: '0.85rem' }}>
+                            Desglose de Personal Subcontratado
+                          </div>
+                          
+                          {/* Especialista */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>Téc. Especialista:</span>
+                            <div>
+                              <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block' }}>Cant.</label>
+                              <input 
+                                type="number" 
+                                min="0"
+                                value={adHocState.sub_esp_cant} 
+                                onChange={e => setAdHocState({...adHocState, sub_esp_cant: parseInt(e.target.value) || 0})}
+                                style={{ width: '100%', padding: '4px' }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block' }}>Gs./Día</label>
+                              <input 
+                                type="number" 
+                                step="10000"
+                                value={adHocState.sub_esp_costo_dia} 
+                                onChange={e => setAdHocState({...adHocState, sub_esp_costo_dia: parseFloat(e.target.value) || 0})}
+                                style={{ width: '100%', padding: '4px' }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block' }}>Días</label>
+                              <input 
+                                type="number" 
+                                step="0.5"
+                                value={adHocState.sub_esp_dias} 
+                                onChange={e => setAdHocState({...adHocState, sub_esp_dias: parseFloat(e.target.value) || 0})}
+                                style={{ width: '100%', padding: '4px' }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Auxiliar */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>Téc. Auxiliar:</span>
+                            <div>
+                              <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block' }}>Cant.</label>
+                              <input 
+                                type="number" 
+                                min="0"
+                                value={adHocState.sub_aux_cant} 
+                                onChange={e => setAdHocState({...adHocState, sub_aux_cant: parseInt(e.target.value) || 0})}
+                                style={{ width: '100%', padding: '4px' }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block' }}>Gs./Día</label>
+                              <input 
+                                type="number" 
+                                step="10000"
+                                value={adHocState.sub_aux_costo_dia} 
+                                onChange={e => setAdHocState({...adHocState, sub_aux_costo_dia: parseFloat(e.target.value) || 0})}
+                                style={{ width: '100%', padding: '4px' }}
+                              />
+                            </div>
+                            <div>
+                              <label style={{ fontSize: '0.7rem', color: '#64748b', display: 'block' }}>Días</label>
+                              <input 
+                                type="number" 
+                                step="0.5"
+                                value={adHocState.sub_aux_dias} 
+                                onChange={e => setAdHocState({...adHocState, sub_aux_dias: parseFloat(e.target.value) || 0})}
+                                style={{ width: '100%', padding: '4px' }}
+                              />
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f3e8ff', padding: '6px 10px', borderRadius: '6px' }}>
+                            <span style={{ fontWeight: 700, color: '#7e22ce', fontSize: '0.85rem' }}>Total Calculado:</span>
+                            <span style={{ fontWeight: 800, color: '#581c87', fontSize: '0.95rem' }}>
+                              {formatGs(
+                                ((adHocState.sub_esp_cant || 0) * (adHocState.sub_esp_costo_dia || 0) * (adHocState.sub_esp_dias || 0)) +
+                                ((adHocState.sub_aux_cant || 0) * (adHocState.sub_aux_costo_dia || 0) * (adHocState.sub_aux_dias || 0))
+                              )}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr>
+                        <td style={{ padding: '8px' }}>Costo Subcontratista (Gs)</td>
+                        <td><input type="number" value={adHocState.costo_total_base} onChange={e => setAdHocState({...adHocState, costo_total_base: parseFloat(e.target.value)||0})} /></td>
+                      </tr>
+                    )}
+
                     <tr>
                       <td style={{ padding: '8px', color: '#a855f7' }}>Margen de Ganancia (%)</td>
                       <td><input type="number" value={adHocState.margen_tercerizado} onChange={e => setAdHocState({...adHocState, margen_tercerizado: parseFloat(e.target.value)||0})} style={{ borderColor: '#a855f7' }}/></td>
@@ -746,7 +1066,11 @@ function Bloque2_SSTT({
                         <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
                           x {item.equipo}
                           {item.overrides && item.overrides.is_tercerizado && (
-                            <span style={{ fontSize: '0.7rem', background: '#a855f7', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>Tercerizado</span>
+                            <span style={{ fontSize: '0.7rem', background: '#a855f7', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>
+                              {item.overrides.modo_subcontrato === 'jornal'
+                                ? `Subcontrato Jornal (${(item.overrides.sub_esp_cant || 0) + (item.overrides.sub_aux_cant || 0)} pers)`
+                                : 'Tercerizado'}
+                            </span>
                           )}
                           {item.overrides && item.overrides.top_down_enabled && (
                             <span style={{ fontSize: '0.7rem', background: '#10b981', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>Top-Down</span>

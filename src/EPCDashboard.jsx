@@ -55,23 +55,7 @@ export default function EPCDashboard() {
   const [totalServicios, setTotalServicios] = useState(0);
 
   // FUENTE DE VERDAD: Array completo de equipos de Procura (elevado desde Bloque1)
-  const [equiposProcura, setEquiposProcura] = useState(() => [{
-    id: crypto.randomUUID(),
-    nombre: 'Transformador de Potencia 80 MVA 220/23 kV',
-    cantidad: 1,
-    costoBase: 450000,
-    modalidad: 'FOB/EXW',
-    ncm: '8504.23.00',
-    porcentajeArancel: undefined,
-    valorFlete: undefined,
-    porcentajeSeguro: undefined,
-    porcentajeDespacho: undefined,
-    aplicarFleteLocal: true,
-    montoFleteLocal: 3500,
-    porcentajeFinanciero: undefined,
-    porcentajeAdmin: undefined,
-    margenPorcentaje: undefined
-  }]);
+  const [equiposProcura, setEquiposProcura] = useState([]);
 
   // Variables globales de costo de procura (elevado desde Bloque1)
   const [procuraDefaults, setProcuraDefaults] = useState({
@@ -85,6 +69,7 @@ export default function EPCDashboard() {
   });
 
   const [detalleServicios, setDetalleServicios] = useState([]);
+  const [resultadosSSTT, setResultadosSSTT] = useState(null);
 
   // FUENTE DE VERDAD: Estados de Servicios SSTT (elevado desde Bloque2 — FASE 2)
   const [cartServicios, setCartServicios] = useState([]);
@@ -212,6 +197,23 @@ export default function EPCDashboard() {
     showToast(`✅ Cotización "${dg.nombreProyecto || quote.NombreObra || 'Sin nombre'}" cargada.`);
   };
 
+  const nuevaCotizacion = () => {
+    setCotizacionId(null);
+    setNombreCliente('');
+    setNombreProyecto('');
+    setEquiposProcura([]);
+    setCartServicios([]);
+    setAlquileresServicios([]);
+    setGastosImprevistos(0);
+    setMargenImprevistosPorcentaje(0);
+    setDistanciaKm(100);
+    setDiasPermitidosCorte(3);
+    setTotalProcura(0);
+    setTotalServicios(0);
+    setActiveBlock(1);
+    showToast('✨ Nueva cotización en blanco iniciada.');
+  };
+
   // Nombres descriptivos para la UI
   const perfiles = {
     b2b: { title: 'Suministro Privado B2B', badge: 'B2B Private', color: '#3b82f6', desc: 'Cotización orientada a venta directa de suministros y proyectos privados sin burocracia licitatoria.' },
@@ -318,6 +320,29 @@ export default function EPCDashboard() {
               onMouseLeave={e => !isSaving && (e.currentTarget.style.transform = 'scale(1)')}
             >
               💾 {isSaving ? 'Guardando...' : 'Guardar Cotización'}
+            </button>
+
+            {/* Botón Nueva Cotización */}
+            <button
+              onClick={nuevaCotizacion}
+              style={{
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                color: '#1e40af',
+                padding: '10px 16px',
+                borderRadius: '8px',
+                fontWeight: 700,
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#3b82f6'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
+            >
+              ✨ Nueva Cotización
             </button>
 
             {/* Botón Mis Cotizaciones */}
@@ -580,6 +605,7 @@ export default function EPCDashboard() {
                   setCondicionTrabajo={setCondicionTrabajo}
                   setTotalServicios={setTotalServicios} 
                   setDetalleServicios={setDetalleServicios} 
+                  setResultadosSSTT={setResultadosSSTT}
                   monedaTrabajo={monedaTrabajo}
                   tipoCambio={tipoCambioVenta}
                   nombreCliente={nombreCliente}
@@ -619,6 +645,12 @@ export default function EPCDashboard() {
               detalleServicios={detalleServicios}
               tipoCambio={tipoCambioVenta}
               monedaTrabajo={monedaTrabajo}
+              nombreCliente={nombreCliente}
+              nombreProyecto={nombreProyecto}
+              alquileres={alquileresServicios}
+              gastosImprevistos={gastosImprevistos}
+              esLicitacion={perfilComercial === 'epc'}
+              resultadosSSTT={resultadosSSTT}
               onGuardar={guardarCotizacionMaestra}
               isSaving={isSaving}
               copilotRef={copilotRef}

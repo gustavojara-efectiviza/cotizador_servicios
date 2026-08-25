@@ -1,130 +1,220 @@
 import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
+import fileSaver from 'file-saver';
+
+const saveAs = fileSaver.saveAs || fileSaver;
 
 /**
- * Función para exportar la cotización a Excel (Formato Beigel SRL)
+ * Función para exportar la cotización a Excel (Formato Profesional Auditable Beigel SRL)
+ * Precios con IVA (10%) INCLUIDO según Ley N° 6380/19 de la República del Paraguay.
  * @param {Object} estadoGlobal - Estado global de la cotización
  */
 export const exportarAExcelAuditable = async (estadoGlobal) => {
   const {
+    cliente = '',
+    proyecto = '',
     equipos = [],        // Equipos de procura
     servicios = [],      // Servicios / SSTT
-    viaticos = [],       // Viáticos (arreglo o monto)
-    riesgos = 0,         // Bolsa de riesgos
-    logistica = 0,       // Bolsa de logística
-    financieros = 0,     // Costos financieros
-    margenGlobal = 0.15, // Margen por defecto si no viene por ítem
+    alquileres = [],     // Alquileres especiales (grúas, equipos de apoyo)
+    logisticaGlobal = 0, // Costo de logística y viáticos
+    gananciaLogistica = 0,
+    precioVentaLogistica = 0,
+    gastosImprevistos = 0,
+    gananciaImprevistos = 0,
+    gastosAdminSSTT = 0,
     esLicitacion = false,
     moneda = 'USD',      // Moneda seleccionada para la oferta final
     tasaCambio = 7500    // Tasa de cambio (Ej: 7500 PYG/USD)
   } = estadoGlobal;
 
-  // --- 1. MATEMÁTICA Y PRORRATEO ---
-  
-  // Función auxiliar para convertir a la moneda seleccionada
-  const convertir = (monto, monedaOrigen) => {
-    if (!monto) return 0;
-    if (!monedaOrigen || monedaOrigen === moneda) return monto;
-    if (moneda === 'PYG' && monedaOrigen === 'USD') return monto * tasaCambio;
-    if (moneda === 'USD' && monedaOrigen === 'PYG') return monto / tasaCambio;
-    return monto;
+  // Sanitizador numérico para evitar NaN o undefined en el XML de Excel
+  const safeNum = (v) => {
+    const n = Number(v);
+    return (!isNaN(n) && isFinite(n)) ? n : 0;
   };
 
-  // Consolidar ítems directos (Procura + Servicios)
-  const itemsDirectos = [
-    ...equipos.map(item => ({ ...item, tipo: 'Equipo' })),
-    ...servicios.map(item => ({ ...item, tipo: 'Servicio' }))
-  ].map(item => {
-    // Manejar diferentes posibles nombres de propiedades según la estructura
-    const costoUnitarioOrig = item.costoBase || item.costoDirectoBase || item.costoUnitario || 0;
-    const cantidad = item.cantidad || 1;
-    const monedaItem = item.moneda || moneda;
+  // Convertidor de moneda
+  const convertir = (monto, monedaOrigen) => {
+    const val = safeNum(monto);
+    if (!val) return 0;
+    if (!monedaOrigen || monedaOrigen === moneda) return val;
+    if (moneda === 'PYG' && monedaOrigen === 'USD') return val * tasaCambio;
+    if (moneda === 'USD' && monedaOrigen === 'PYG') return val / tasaCambio;
+    return val;
+  };
+
+  // --- 1. PROCESAMIENTO DE PROCURA ---
+  const itemsProcura = equipos.map(item => {
+    const qty = safeNum(item.cantidad) || 1;
+    const costoUnitOrig = safeNum(item.costoBase);
+    const costoUnitConvertido = convertir(costoUnitOrig, item.moneda || 'USD');
+    const costoTotalBase = costoUnitConvertido * qty;
+    const margen = item.margen !== undefined ? safeNum(item.margen) : 0.15;
     
-    const costoUnitarioConvertido = convertir(costoUnitarioOrig, monedaItem);
-    const costoTotalBase = costoUnitarioConvertido * cantidad;
+    // Venta Neto y con IVA 10%
+    const divisor = Math.max(0.01, 1 - Math.min(0.99, margen));
+    const precioVentaNeto = costoTotalBase / divisor;
+    const precioVentaConIVA = precioVentaNeto * 1.10;
+    const precioUnitarioConIVA = qty > 0 ? precioVentaConIVA / qty : 0;
 
     return {
       ...item,
-      costoUnitarioConvertido,
-      cantidad,
+      tipo: 'Equipo',
+      cantidad: qty,
+      costoUnitConvertido,
       costoTotalBase,
-      // Usar margen del ítem o el global
-      margen: item.margen !== undefined ? item.margen : margenGlobal
-    };
-  });
-
-  // Calcular la suma de costos directos SOLO para ítems de tipo 'Servicio' (SSTT)
-  // Paso 3: El Uso de Equipos (Tecnología) ya viene dentro de costoTotalBase del ítem.
-  // Al sumarlo aquí, se consolida como costo directo de SSTT y NO como indirecto.
-  const sumaCostosDirectosSSTT = itemsDirectos
-    .filter(item => item.tipo === 'Servicio')
-    .reduce((acc, item) => acc + item.costoTotalBase, 0);
-
-  // Paso 2: La Bolsa de Prorrateo Exclusiva de SSTT
-  // Capturamos las variables del estadoGlobal (excluimos 'riesgos' para obviar la contingencia global por el momento)
-  const apoyosYAlquileres = Number(estadoGlobal.apoyosYAlquileres || estadoGlobal.alquileres || 0);
-  const gastosImprevistos = Number(estadoGlobal.gastosImprevistos || estadoGlobal.imprevistos || 0);
-  const logisticaGlobal = Number(estadoGlobal.logisticaGlobal || estadoGlobal.logistica || 0);
-  
-  // Gastos Administrativos: Calculados EXCLUSIVAMENTE sobre el subtotal de costos directos de SSTT
-  // (Si viene el porcentaje del estado global se usa, si no, se asume un 3% estándar)
-  const porcentajeAdminSSTT = Number(estadoGlobal.porcentajeAdminSSTT || 0.03);
-  const gastosAdminSSTT = sumaCostosDirectosSSTT * porcentajeAdminSSTT;
-
-  // Bolsa estricta de indirectos para SSTT
-  const sumaCostosIndirectos = apoyosYAlquileres + gastosImprevistos + logisticaGlobal + gastosAdminSSTT;
-
-  // Calcular prorrateo y precios finales por ítem
-  const itemsProcesados = itemsDirectos.map(item => {
-    let pesoRelativo = 0;
-    let prorrateoAsignado = 0;
-
-    if (item.tipo === 'Servicio') {
-      // Prorrateo exclusivo para SSTT
-      pesoRelativo = sumaCostosDirectosSSTT > 0 ? (item.costoTotalBase / sumaCostosDirectosSSTT) : 0;
-      prorrateoAsignado = sumaCostosIndirectos * pesoRelativo;
-    } else {
-      // Paso 4: Blindaje Matemático de Procura
-      // Los ítems de Procura mantienen su estructura Landed Cost.
-      pesoRelativo = 0;
-      prorrateoAsignado = 0;
-    }
-
-    const costoTotalReal = item.costoTotalBase + prorrateoAsignado;
-    
-    // Precio Venta Neto (fórmula de margen sobre venta: Precio = Costo / (1 - Margen))
-    const precioVentaNeto = costoTotalReal / (1 - (item.margen || 0.15));
-    const precioVentaConIVA = precioVentaNeto * 1.10; // IVA 10% Ley Paraguaya
-    
-    // Valores unitarios para la vista cliente
-    const precioUnitarioConIVA = precioVentaConIVA / item.cantidad;
-
-    return {
-      ...item,
-      pesoRelativo,
-      prorrateoAsignado,
-      costoTotalReal,
+      margen,
       precioVentaNeto,
       precioVentaConIVA,
       precioUnitarioConIVA
     };
   });
 
-  // --- 2. GENERACIÓN DEL EXCEL ---
+  // --- 2. PROCESAMIENTO DE SERVICIOS SSTT (Regla de Imprevistos, Tercerizados y MO Propia) ---
+  const serviciosProcesados = servicios.map(item => {
+    const qty = safeNum(item.cantidad) || 1;
+    const esTercerizado = item.estrategia === 'Subcontrato' || item.is_tercerizado === true || (safeNum(item.Costo_Subcontrato_Item) > 0 && safeNum(item.Costo_MO_Item) === 0);
+    
+    const cTec = esTercerizado ? 0 : safeNum(convertir(item.Costo_Tecnologia_Item, item.moneda || 'PYG'));
+    const cMO = esTercerizado ? 0 : safeNum(convertir(item.Costo_MO_Item, item.moneda || 'PYG'));
+    const cSubc = esTercerizado ? safeNum(convertir(item.Costo_Subcontrato_Item || item.costoBase, item.moneda || 'PYG')) : 0;
+    const cFee = safeNum(convertir(item.costoServiceFee, item.moneda || 'PYG'));
+    const cAmort = safeNum(convertir(item.costoAmortizacion, item.moneda || 'PYG'));
+    
+    const subtotalDirectoUnit = cTec + cMO + cSubc + cFee + cAmort;
+    const subtotalDirectoTotal = subtotalDirectoUnit * qty;
+
+    const horas_equipo = esTercerizado ? 0 : (safeNum(item.horas_equipo));
+    const horas_servicio = esTercerizado ? 0 : (safeNum(item.horas_servicio));
+
+    return {
+      ...item,
+      tipo: 'Servicio',
+      cantidad: qty,
+      esTercerizado,
+      horas_equipo,
+      horas_servicio,
+      cTec,
+      cMO,
+      cSubc,
+      cFee,
+      cAmort,
+      subtotalDirectoUnit,
+      subtotalDirectoTotal
+    };
+  });
+
+  // Suma de MO propia para distribuir logística e imprevistos SÓLO en personal propio
+  const sumaMOPropia = serviciosProcesados
+    .filter(s => !s.esTercerizado)
+    .reduce((acc, s) => acc + (s.cMO * s.cantidad), 0);
+
+  const sumaCostoDirectoSSTTTotal = serviciosProcesados
+    .reduce((acc, s) => acc + s.subtotalDirectoTotal, 0);
+
+  const logisticaConvertida = safeNum(convertir(logisticaGlobal, 'PYG'));
+  const imprevistosConvertidos = safeNum(convertir(gastosImprevistos, 'PYG'));
+  const adminSSTTConvertido = safeNum(convertir(gastosAdminSSTT, 'PYG'));
+
+  const itemsSSTT = serviciosProcesados.map(item => {
+    const qty = item.cantidad;
+    let logAsignada = 0;
+    let impAsignado = 0;
+    let adminAsignado = 0;
+
+    if (!item.esTercerizado && sumaMOPropia > 0) {
+      // Regla de Negocio: Logística e Imprevistos se asignan al Personal Propio
+      const pesoMO = (item.cMO * qty) / sumaMOPropia;
+      logAsignada = logisticaConvertida * pesoMO;
+      impAsignado = imprevistosConvertidos * pesoMO;
+    } else {
+      // Regla de Negocio: 0 Imprevistos y 0 Logística para subcontratos tercerizados
+      logAsignada = 0;
+      impAsignado = 0;
+    }
+
+    if (sumaCostoDirectoSSTTTotal > 0) {
+      const pesoDirecto = item.subtotalDirectoTotal / sumaCostoDirectoSSTTTotal;
+      adminAsignado = adminSSTTConvertido * pesoDirecto;
+    }
+
+    const costoTotalReal = item.costo_total_real 
+      ? safeNum(convertir(item.costo_total_real, item.moneda || 'PYG')) 
+      : (item.subtotalDirectoTotal + logAsignada + impAsignado + adminAsignado);
+      
+    const margen = item.margen !== undefined ? safeNum(item.margen) : 0.15;
+    
+    // Precio de Venta Neto y con IVA 10% (Usa el valor oficial del motor para paridad 1:1 absoluta)
+    const divisor = Math.max(0.01, 1 - Math.min(0.99, margen));
+    const precioVentaNeto = item.precio_total_final 
+      ? safeNum(convertir(item.precio_total_final, item.moneda || 'PYG'))
+      : (costoTotalReal / divisor);
+      
+    const precioVentaConIVA = precioVentaNeto * 1.10;
+    const precioUnitarioConIVA = qty > 0 ? (precioVentaConIVA / qty) : 0;
+
+    return {
+      ...item,
+      logAsignada: item.logAsignada || logAsignada,
+      impAsignado: item.impAsignado || impAsignado,
+      adminAsignado: item.adminAsignado || adminAsignado,
+      costoTotalReal,
+      margen,
+      precioVentaNeto,
+      precioVentaConIVA,
+      precioUnitarioConIVA
+    };
+  });
+
+  // --- 3. PROCESAMIENTO DE ALQUILERES ESPECIALES (Partida Independiente) ---
+  const itemsAlquileres = (Array.isArray(alquileres) ? alquileres : []).map(alq => {
+    const qty = safeNum(alq.cantidad) || 1;
+    const costoUnitOrig = safeNum(alq.costoBase || alq.costo || alq.costo_directo_unitario);
+    const costoUnitConvertido = convertir(costoUnitOrig, alq.moneda || 'PYG');
+    const costoTotal = costoUnitConvertido * qty;
+    const margen = alq.margen !== undefined ? safeNum(alq.margen) : 0.30;
+    
+    const divisor = Math.max(0.01, 1 - Math.min(0.99, margen));
+    const precioVentaNeto = alq.precio_total_final 
+      ? safeNum(convertir(alq.precio_total_final, alq.moneda || 'PYG'))
+      : (alq.precioFinal ? safeNum(convertir(alq.precioFinal, alq.moneda || 'PYG')) : (costoTotal / divisor));
+      
+    const precioVentaConIVA = precioVentaNeto * 1.10;
+    const precioUnitarioConIVA = qty > 0 ? (precioVentaConIVA / qty) : 0;
+
+    return {
+      ...alq,
+      descripcion: alq.descripcion || alq.nombre || alq.equipo || 'Alquiler Especial / Equipo de Apoyo',
+      cantidad: qty,
+      costoUnitConvertido,
+      costoTotal,
+      margen,
+      precioVentaNeto,
+      precioVentaConIVA,
+      precioUnitarioConIVA
+    };
+  });
+
+
+  // --- 4. GENERACIÓN DE HOJAS CON EXCELJS ---
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Beigel SRL';
   workbook.created = new Date();
 
-  // Estilos corporativos Beigel SRL
+  // Estilos Corporativos
   const blueFill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: { argb: 'FF003366' } // Azul institucional profundo
+    fgColor: { argb: 'FF003366' }
+  };
+  const sectionFill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FFEBF2FA' }
   };
   const whiteFont = {
     color: { argb: 'FFFFFFFF' },
     bold: true,
-    size: 12,
+    size: 11,
     name: 'Calibri'
   };
   const blackFontBold = {
@@ -133,143 +223,306 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
     size: 11,
     name: 'Calibri'
   };
+  const headerMetaFont = {
+    color: { argb: 'FF003366' },
+    bold: true,
+    size: 10,
+    name: 'Calibri'
+  };
+  const metaValFont = {
+    color: { argb: 'FF333333' },
+    size: 10,
+    name: 'Calibri'
+  };
+
+  const thinBorder = {
+    top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+    left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+    bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+    right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+  };
+
   const moneyFormat = '#,##0.00';
   const percentFormat = '0.00%';
+  const fechaHoy = new Date().toLocaleDateString('es-PY', { year: 'numeric', month: '2-digit', day: '2-digit' });
+
 
   // =========================================================================
-  // HOJA 1: Propuesta Comercial (Vista Cliente)
+  // HOJA 1: Propuesta Comercial (Vista Cliente - Lista para Copiar y Pegar)
+  // Precios con IVA (10%) INCLUIDO según Ley Paraguaya N° 6380/19
   // =========================================================================
   const sheet1 = workbook.addWorksheet('Propuesta Comercial');
+  const colsSheet1 = [8, 65, 10, 26, 28];
+  colsSheet1.forEach((w, i) => { sheet1.getColumn(i + 1).width = w; });
 
-  // Banner y Título
+  // Banner
   sheet1.mergeCells('A1:E2');
   const title1 = sheet1.getCell('A1');
   title1.value = 'PROPUESTA COMERCIAL - BEIGEL SRL';
   title1.fill = blueFill;
-  title1.font = { ...whiteFont, size: 16 };
+  title1.font = { ...whiteFont, size: 15 };
   title1.alignment = { vertical: 'middle', horizontal: 'center' };
 
-  // Espacio
   sheet1.addRow([]);
 
-  // Encabezados
+  // Metadatos
+  const rowMeta1 = sheet1.addRow(['CLIENTE:', cliente || 'A Convenir', '', 'FECHA:', fechaHoy]);
+  rowMeta1.getCell(1).font = headerMetaFont;
+  rowMeta1.getCell(2).font = metaValFont;
+  rowMeta1.getCell(4).font = headerMetaFont;
+  rowMeta1.getCell(5).font = metaValFont;
+
+  const rowMeta2 = sheet1.addRow(['PROYECTO / OBRA:', proyecto || 'Suministros y Servicios EPC', '', 'MONEDA:', `${moneda} (IVA 10% Incluido)`]);
+  rowMeta2.getCell(1).font = headerMetaFont;
+  rowMeta2.getCell(2).font = metaValFont;
+  rowMeta2.getCell(4).font = headerMetaFont;
+  rowMeta2.getCell(5).font = metaValFont;
+
+  if (moneda === 'USD') {
+    const rowMeta3 = sheet1.addRow(['T.C. REFERENCIA:', `1 USD = ${Number(tasaCambio).toLocaleString('es-PY')} PYG`, '', 'RÉGIMEN:', esLicitacion ? 'Licitación Pública' : 'Sector Privado']);
+    rowMeta3.getCell(1).font = headerMetaFont;
+    rowMeta3.getCell(2).font = metaValFont;
+    rowMeta3.getCell(4).font = headerMetaFont;
+    rowMeta3.getCell(5).font = metaValFont;
+  }
+
+  sheet1.addRow([]);
+
+  // Cabecera Tabla Comercial
   const headerRow1 = sheet1.addRow([
     'Ítem', 
-    'Descripción', 
-    'Cant', 
+    'Descripción del Suministro / Servicio', 
+    'Cant.', 
     `PU c/ IVA (${moneda})`, 
     `PT c/ IVA (${moneda})`
   ]);
-  
   headerRow1.eachCell(cell => {
     cell.fill = blueFill;
     cell.font = whiteFont;
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   });
+  headerRow1.height = 26;
 
   let indexGeneral = 1;
+  let rowNumSubtotalA = null;
+  let rowNumSubtotalB = null;
+  let rowNumSubtotalC = null;
 
-  // A. SUMINISTRO DE EQUIPOS (PROCURA)
+  // --- SECCIÓN A: PROCURA ---
   const rowA = sheet1.addRow(['', 'A. SUMINISTRO DE EQUIPOS (PROCURA)', '', '', '']);
-  rowA.getCell(2).font = blackFontBold;
+  rowA.getCell(2).font = { ...blackFontBold, color: { argb: 'FF003366' } };
+  rowA.fill = sectionFill;
 
-  let totalPropuestaProcura = 0;
-  itemsProcesados.filter(i => i.tipo === 'Equipo').forEach(item => {
-    const row = sheet1.addRow([
-      indexGeneral++,
-      item.descripcion || item.item || 'Ítem sin nombre',
-      item.cantidad,
-      item.precioUnitarioConIVA,
-      item.precioVentaConIVA
+  let startRowProcura = null;
+  let endRowProcura = null;
+
+  if (itemsProcura.length > 0) {
+    itemsProcura.forEach(item => {
+      const row = sheet1.addRow([
+        indexGeneral++,
+        item.descripcion || item.item || 'Suministro sin nombre',
+        item.cantidad,
+        0,
+        item.precioVentaConIVA
+      ]);
+      const cur = row.number;
+      if (!startRowProcura) startRowProcura = cur;
+      endRowProcura = cur;
+
+      row.getCell(4).value = { formula: `E${cur}/C${cur}`, result: item.precioUnitarioConIVA };
+      row.getCell(4).numFmt = moneyFormat;
+      row.getCell(5).numFmt = moneyFormat;
+      row.getCell(1).alignment = { horizontal: 'center' };
+      row.getCell(3).alignment = { horizontal: 'center' };
+      row.eachCell(c => c.border = thinBorder);
+    });
+
+    const sumProcuraIVA = itemsProcura.reduce((acc, i) => acc + i.precioVentaConIVA, 0);
+    const rowSubA = sheet1.addRow([
+      '', '', '', 
+      'Subtotal Suministros c/ IVA:', 
+      { formula: `SUM(E${startRowProcura}:E${endRowProcura})`, result: sumProcuraIVA }
     ]);
-    row.getCell(4).numFmt = moneyFormat;
-    row.getCell(5).numFmt = moneyFormat;
-    row.getCell(1).alignment = { horizontal: 'center' };
-    row.getCell(3).alignment = { horizontal: 'center' };
-    totalPropuestaProcura += item.precioVentaConIVA;
-  });
-
-  const rowSubProcura = sheet1.addRow(['', '', '', 'Subtotal Suministros:', totalPropuestaProcura]);
-  rowSubProcura.getCell(4).font = blackFontBold;
-  rowSubProcura.getCell(5).font = blackFontBold;
-  rowSubProcura.getCell(5).numFmt = moneyFormat;
+    rowNumSubtotalA = rowSubA.number;
+    rowSubA.getCell(4).font = blackFontBold;
+    rowSubA.getCell(5).font = blackFontBold;
+    rowSubA.getCell(5).numFmt = moneyFormat;
+    rowSubA.fill = sectionFill;
+  } else {
+    const emptyRowA = sheet1.addRow(['-', 'No incluye suministros en esta oferta', 0, 0, 0]);
+    emptyRowA.eachCell(c => c.border = thinBorder);
+    emptyRowA.getCell(4).numFmt = moneyFormat;
+    emptyRowA.getCell(5).numFmt = moneyFormat;
+  }
 
   sheet1.addRow([]);
 
-  // B. SERVICIOS TÉCNICOS Y MANO DE OBRA (SSTT)
+  // --- SECCIÓN B: SSTT ---
   const rowB = sheet1.addRow(['', 'B. SERVICIOS TÉCNICOS Y MANO DE OBRA (SSTT)', '', '', '']);
-  rowB.getCell(2).font = blackFontBold;
+  rowB.getCell(2).font = { ...blackFontBold, color: { argb: 'FF003366' } };
+  rowB.fill = sectionFill;
 
-  let totalPropuestaSSTT = 0;
-  itemsProcesados.filter(i => i.tipo === 'Servicio').forEach(item => {
-    const row = sheet1.addRow([
-      indexGeneral++,
-      item.descripcion || item.item || 'Ítem sin nombre',
-      item.cantidad,
-      item.precioUnitarioConIVA,
-      item.precioVentaConIVA
+  let startRowSSTT = null;
+  let endRowSSTT = null;
+
+  if (itemsSSTT.length > 0) {
+    itemsSSTT.forEach(item => {
+      const row = sheet1.addRow([
+        indexGeneral++,
+        item.descripcion || item.item || item.equipo || 'Servicio Técnico Especializado',
+        item.cantidad,
+        0,
+        item.precioVentaConIVA
+      ]);
+      const cur = row.number;
+      if (!startRowSSTT) startRowSSTT = cur;
+      endRowSSTT = cur;
+
+      row.getCell(4).value = { formula: `E${cur}/C${cur}`, result: item.precioUnitarioConIVA };
+      row.getCell(4).numFmt = moneyFormat;
+      row.getCell(5).numFmt = moneyFormat;
+      row.getCell(1).alignment = { horizontal: 'center' };
+      row.getCell(3).alignment = { horizontal: 'center' };
+      row.eachCell(c => c.border = thinBorder);
+    });
+
+    const sumSSTTIVA = itemsSSTT.reduce((acc, i) => acc + i.precioVentaConIVA, 0);
+    const rowSubB = sheet1.addRow([
+      '', '', '', 
+      'Subtotal Servicios c/ IVA:', 
+      { formula: `SUM(E${startRowSSTT}:E${endRowSSTT})`, result: sumSSTTIVA }
     ]);
-    row.getCell(4).numFmt = moneyFormat;
-    row.getCell(5).numFmt = moneyFormat;
-    row.getCell(1).alignment = { horizontal: 'center' };
-    row.getCell(3).alignment = { horizontal: 'center' };
-    totalPropuestaSSTT += item.precioVentaConIVA;
-  });
+    rowNumSubtotalB = rowSubB.number;
+    rowSubB.getCell(4).font = blackFontBold;
+    rowSubB.getCell(5).font = blackFontBold;
+    rowSubB.getCell(5).numFmt = moneyFormat;
+    rowSubB.fill = sectionFill;
+  } else {
+    const emptyRowB = sheet1.addRow(['-', 'No incluye servicios técnicos en esta oferta', 0, 0, 0]);
+    emptyRowB.eachCell(c => c.border = thinBorder);
+    emptyRowB.getCell(4).numFmt = moneyFormat;
+    emptyRowB.getCell(5).numFmt = moneyFormat;
+  }
 
-  const rowSubSSTT = sheet1.addRow(['', '', '', 'Subtotal Servicios:', totalPropuestaSSTT]);
-  rowSubSSTT.getCell(4).font = blackFontBold;
-  rowSubSSTT.getCell(5).font = blackFontBold;
-  rowSubSSTT.getCell(5).numFmt = moneyFormat;
+  // --- SECCIÓN C: ALQUILERES ESPECIALES (SI EXISTEN) ---
+  let startRowAlq = null;
+  let endRowAlq = null;
 
-  // Total Final
-  sheet1.addRow([]); // Espacio
-  const totalGeneral = totalPropuestaProcura + totalPropuestaSSTT;
-  const totalRow1 = sheet1.addRow(['', '', '', 'TOTAL GENERAL DE LA OFERTA:', totalGeneral]);
-  totalRow1.getCell(4).font = blackFontBold;
-  totalRow1.getCell(5).font = blackFontBold;
+  if (itemsAlquileres.length > 0) {
+    sheet1.addRow([]);
+    const rowC = sheet1.addRow(['', 'C. ALQUILERES ESPECIALES Y EQUIPOS DE APOYO PESADO', '', '', '']);
+    rowC.getCell(2).font = { ...blackFontBold, color: { argb: 'FF003366' } };
+    rowC.fill = sectionFill;
+
+    itemsAlquileres.forEach(item => {
+      const row = sheet1.addRow([
+        indexGeneral++,
+        item.descripcion || item.nombre || 'Alquiler Especial de Maquinaria',
+        item.cantidad,
+        0,
+        item.precioVentaConIVA
+      ]);
+      const cur = row.number;
+      if (!startRowAlq) startRowAlq = cur;
+      endRowAlq = cur;
+
+      row.getCell(4).value = { formula: `E${cur}/C${cur}`, result: item.precioUnitarioConIVA };
+      row.getCell(4).numFmt = moneyFormat;
+      row.getCell(5).numFmt = moneyFormat;
+      row.getCell(1).alignment = { horizontal: 'center' };
+      row.getCell(3).alignment = { horizontal: 'center' };
+      row.eachCell(c => c.border = thinBorder);
+    });
+
+    const sumAlqIVA = itemsAlquileres.reduce((acc, i) => acc + i.precioVentaConIVA, 0);
+    const rowSubC = sheet1.addRow([
+      '', '', '', 
+      'Subtotal Alquileres c/ IVA:', 
+      { formula: `SUM(E${startRowAlq}:E${endRowAlq})`, result: sumAlqIVA }
+    ]);
+    rowNumSubtotalC = rowSubC.number;
+    rowSubC.getCell(4).font = blackFontBold;
+    rowSubC.getCell(5).font = blackFontBold;
+    rowSubC.getCell(5).numFmt = moneyFormat;
+    rowSubC.fill = sectionFill;
+  }
+
+  // --- TOTAL GENERAL ---
+  sheet1.addRow([]);
+
+  const subtotalRefs = [rowNumSubtotalA, rowNumSubtotalB, rowNumSubtotalC].filter(Boolean);
+  const formulaTotalGeneral = subtotalRefs.length > 0 ? subtotalRefs.map(r => `E${r}`).join('+') : '0';
+  
+  const totalEstimadoIVA = itemsProcura.reduce((acc, i) => acc + i.precioVentaConIVA, 0) +
+                           itemsSSTT.reduce((acc, i) => acc + i.precioVentaConIVA, 0) +
+                           itemsAlquileres.reduce((acc, i) => acc + i.precioVentaConIVA, 0);
+
+  const totalRow1 = sheet1.addRow([
+    '', '', '', 
+    'TOTAL GENERAL DE LA OFERTA (c/ IVA):', 
+    { formula: formulaTotalGeneral, result: totalEstimadoIVA }
+  ]);
+  const rowNumTotalGeneral = totalRow1.number;
+  totalRow1.getCell(4).font = { ...blackFontBold, size: 12, color: { argb: 'FF003366' } };
+  totalRow1.getCell(5).font = { ...blackFontBold, size: 12, color: { argb: 'FF003366' } };
   totalRow1.getCell(5).numFmt = moneyFormat;
+  totalRow1.height = 24;
 
-  // Ajustar anchos Hoja 1
-  sheet1.columns = [
-    { width: 8 },  // Ítem
-    { width: 60 }, // Descripción
-    { width: 10 }, // Cant
-    { width: 20 }, // PU
-    { width: 25 }  // PT
-  ];
+  // Liquidación Legal IVA 10% (Total / 11)
+  const rowIVA1 = sheet1.addRow([
+    '', '', '', 
+    'Liquidación IVA (10% incluido - Ley 6380/19):', 
+    { formula: `E${rowNumTotalGeneral}/11`, result: totalEstimadoIVA / 11 }
+  ]);
+  rowIVA1.getCell(4).font = { ...metaValFont, italic: true };
+  rowIVA1.getCell(5).font = { ...metaValFont, italic: true };
+  rowIVA1.getCell(5).numFmt = moneyFormat;
+
+  sheet1.addRow([]);
+  const notaLegal = sheet1.addRow([
+    'Nota Legal:', 
+    'Los precios unitarios y totales expresados en la presente propuesta comercial incluyen el Impuesto al Valor Agregado (IVA 10%) conforme a la legislación tributaria paraguaya vigente.'
+  ]);
+  notaLegal.getCell(1).font = { ...metaValFont, bold: true };
+  notaLegal.getCell(2).font = { ...metaValFont, italic: true };
+
 
   // =========================================================================
-  // HOJA 2: Auditoría Procura (Método de Control Total)
+  // HOJA 2: Auditoría Procura (Desglose Landed Cost & Fórmulas Vivas)
   // =========================================================================
   const sheet2 = workbook.addWorksheet('Auditoría Procura');
+  const colsSheet2 = [8, 42, 14, 8, 18, 18, 14, 14, 18, 14, 14, 14, 14, 14, 22, 18, 12, 22, 22];
+  colsSheet2.forEach((w, i) => { sheet2.getColumn(i + 1).width = w; });
 
-  sheet2.mergeCells('A1:P2');
+  sheet2.mergeCells('A1:S2');
   const title2 = sheet2.getCell('A1');
   title2.value = 'AUDITORÍA GERENCIAL - PROCURA Y SUMINISTROS (DESGLOSE COMPLETO)';
   title2.fill = blueFill;
-  title2.font = { ...whiteFont, size: 16 };
+  title2.font = { ...whiteFont, size: 15 };
   title2.alignment = { vertical: 'middle', horizontal: 'center' };
 
   sheet2.addRow([]);
 
-  // Encabezados Procura
   const headersSheet2 = [
     'Ítem',
     'Descripción',
-    'Cant',
-    `FOB/EXW (${moneda})`,
+    'NCM',
+    'Cant.',
+    `FOB Unit. (${moneda})`,
+    `FOB Total (${moneda})`,
     `Flete Int. (${moneda})`,
     `Seguro (${moneda})`,
-    `CIF (${moneda})`,
+    `CIF Total (${moneda})`,
     `Arancel (${moneda})`,
     `Despacho (${moneda})`,
     `Flete Local (${moneda})`,
     `Financiero (${moneda})`,
     `Admin (${moneda})`,
-    `Landed Cost/Costo Directo Base (${moneda})`,
+    `Landed Cost Total (${moneda})`,
+    `Landed Unit. (${moneda})`,
     'Margen (%)',
-    `Precio Venta Neto (${moneda})`,
-    `Precio Venta c/ IVA (${moneda})`
+    `Venta Neto Total (${moneda})`,
+    `Venta Total c/ IVA (${moneda})`
   ];
   
   const headerRow2 = sheet2.addRow(headersSheet2);
@@ -278,150 +531,150 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
     cell.font = whiteFont;
     cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   });
-  headerRow2.height = 40;
+  headerRow2.height = 36;
 
-  let totFob = 0, totFleteInt = 0, totSeg = 0, totCif = 0, totArancel = 0;
-  let totDespacho = 0, totFleteLoc = 0, totFin = 0, totAdmin = 0, totLanded = 0;
-  let totProcuraNeto = 0, totProcuraIVA = 0;
-  let indexProcura = 1;
+  let startRowProcuraAudit = null;
+  let endRowProcuraAudit = null;
+  let idxProcura = 1;
 
-  itemsProcesados.filter(i => i.tipo === 'Equipo').forEach(item => {
-    // Si viene la info desglosada, la usamos; si no, ponemos 0 y el total base.
-    const qty = item.cantidad || 1;
-    const cFob = item.fobUnit ? item.fobUnit * qty : 0;
-    const cFleteInt = item.fleteTotal || 0;
-    const cSeg = item.seguroTotal || 0;
-    const cCif = item.cifTotal || 0;
-    const cArancel = item.arancelTotal || 0;
-    const cDesp = item.despachoTotal || 0;
-    const cFleteLoc = item.fleteLocalTotal || 0;
-    const cFin = item.finTotal || 0;
-    const cAdmin = item.adminTotal || 0;
-    const cLanded = item.costoTotalBase; // Este es el garantizado
+  let sumAuditFOB = 0, sumAuditFlete = 0, sumAuditSeg = 0, sumAuditCIF = 0;
+  let sumAuditArancel = 0, sumAuditDesp = 0, sumAuditFleteLoc = 0, sumAuditFin = 0, sumAuditAdmin = 0;
+  let sumAuditLanded = 0, sumAuditVentaNeto = 0, sumAuditVentaIVA = 0, sumAuditCant = 0;
+
+  itemsProcura.forEach(item => {
+    const qty = item.cantidad;
+    const fobUnit = safeNum(item.fobUnit);
+    const fobTotal = fobUnit * qty;
+    const fleteInt = safeNum(item.fleteTotal);
+    const seguro = safeNum(item.seguroTotal);
+    const cifTotal = safeNum(item.cifTotal) || (fobTotal + fleteInt + seguro);
+    const arancel = safeNum(item.arancelTotal);
+    const despacho = safeNum(item.despachoTotal);
+    const fleteLoc = safeNum(item.fleteLocalTotal);
+    const finTotal = safeNum(item.finTotal);
+    const adminTotal = safeNum(item.adminTotal);
+    const landedTotal = safeNum(item.costoTotalBase) || (cifTotal + arancel + despacho + fleteLoc + finTotal + adminTotal);
+    const landedUnit = qty > 0 ? (landedTotal / qty) : 0;
+    const margen = item.margen;
+    const ventaNeto = item.precioVentaNeto;
+    const ventaIVA = item.precioVentaConIVA;
+
+    sumAuditCant += qty;
+    sumAuditFOB += fobTotal;
+    sumAuditFlete += fleteInt;
+    sumAuditSeg += seguro;
+    sumAuditCIF += cifTotal;
+    sumAuditArancel += arancel;
+    sumAuditDesp += despacho;
+    sumAuditFleteLoc += fleteLoc;
+    sumAuditFin += finTotal;
+    sumAuditAdmin += adminTotal;
+    sumAuditLanded += landedTotal;
+    sumAuditVentaNeto += ventaNeto;
+    sumAuditVentaIVA += ventaIVA;
 
     const row = sheet2.addRow([
-      indexProcura++,
-      item.descripcion || item.item || 'Ítem sin nombre',
+      idxProcura++,
+      item.descripcion || item.item || 'Suministro sin nombre',
+      item.ncm || '8504.23.00',
       qty,
-      cFob,
-      cFleteInt,
-      cSeg,
-      cCif,
-      cArancel,
-      cDesp,
-      cFleteLoc,
-      cFin,
-      cAdmin,
-      cLanded,
-      item.margen,
-      item.precioVentaNeto,
-      item.precioVentaConIVA
+      fobUnit,
+      0,
+      fleteInt,
+      seguro,
+      0,
+      arancel,
+      despacho,
+      fleteLoc,
+      finTotal,
+      adminTotal,
+      0,
+      0,
+      margen,
+      0,
+      0
     ]);
 
-    // Formato
-    [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16].forEach(col => row.getCell(col).numFmt = moneyFormat);
-    row.getCell(14).numFmt = percentFormat;
+    const r = row.number;
+    if (!startRowProcuraAudit) startRowProcuraAudit = r;
+    endRowProcuraAudit = r;
+
+    row.getCell(6).value = { formula: `D${r}*E${r}`, result: fobTotal };
+    row.getCell(9).value = { formula: `F${r}+G${r}+H${r}`, result: cifTotal };
+    row.getCell(15).value = { formula: `I${r}+J${r}+K${r}+L${r}+M${r}+N${r}`, result: landedTotal };
+    row.getCell(16).value = { formula: `O${r}/D${r}`, result: landedUnit };
+    row.getCell(18).value = { formula: `O${r}/(1-Q${r})`, result: ventaNeto };
+    row.getCell(19).value = { formula: `R${r}*1.10`, result: ventaIVA };
+
+    [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19].forEach(col => row.getCell(col).numFmt = moneyFormat);
+    row.getCell(17).numFmt = percentFormat;
     row.getCell(1).alignment = { horizontal: 'center' };
     row.getCell(3).alignment = { horizontal: 'center' };
-
-    totFob += cFob;
-    totFleteInt += cFleteInt;
-    totSeg += cSeg;
-    totCif += cCif;
-    totArancel += cArancel;
-    totDespacho += cDesp;
-    totFleteLoc += cFleteLoc;
-    totFin += cFin;
-    totAdmin += cAdmin;
-    totLanded += cLanded;
-    totProcuraNeto += item.precioVentaNeto;
-    totProcuraIVA += item.precioVentaConIVA;
+    row.getCell(4).alignment = { horizontal: 'center' };
+    row.eachCell(c => c.border = thinBorder);
   });
 
-  sheet2.addRow([]);
-  const totalRow2 = sheet2.addRow([
-    '', 'TOTALES PROCURA:', '', 
-    totFob, totFleteInt, totSeg, totCif, totArancel, totDespacho, 
-    totFleteLoc, totFin, totAdmin, totLanded, '', totProcuraNeto, totProcuraIVA
-  ]);
-  totalRow2.eachCell(cell => { cell.font = blackFontBold; });
-  [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16].forEach(col => totalRow2.getCell(col).numFmt = moneyFormat);
+  if (startRowProcuraAudit && endRowProcuraAudit) {
+    sheet2.addRow([]);
+    const totalRow2 = sheet2.addRow(['', 'TOTALES PROCURA:', '']);
+    
+    totalRow2.getCell(4).value = { formula: `SUM(D${startRowProcuraAudit}:D${endRowProcuraAudit})`, result: sumAuditCant };
+    totalRow2.getCell(6).value = { formula: `SUM(F${startRowProcuraAudit}:F${endRowProcuraAudit})`, result: sumAuditFOB };
+    totalRow2.getCell(7).value = { formula: `SUM(G${startRowProcuraAudit}:G${endRowProcuraAudit})`, result: sumAuditFlete };
+    totalRow2.getCell(8).value = { formula: `SUM(H${startRowProcuraAudit}:H${endRowProcuraAudit})`, result: sumAuditSeg };
+    totalRow2.getCell(9).value = { formula: `SUM(I${startRowProcuraAudit}:I${endRowProcuraAudit})`, result: sumAuditCIF };
+    totalRow2.getCell(10).value = { formula: `SUM(J${startRowProcuraAudit}:J${endRowProcuraAudit})`, result: sumAuditArancel };
+    totalRow2.getCell(11).value = { formula: `SUM(K${startRowProcuraAudit}:K${endRowProcuraAudit})`, result: sumAuditDesp };
+    totalRow2.getCell(12).value = { formula: `SUM(L${startRowProcuraAudit}:L${endRowProcuraAudit})`, result: sumAuditFleteLoc };
+    totalRow2.getCell(13).value = { formula: `SUM(M${startRowProcuraAudit}:M${endRowProcuraAudit})`, result: sumAuditFin };
+    totalRow2.getCell(14).value = { formula: `SUM(N${startRowProcuraAudit}:N${endRowProcuraAudit})`, result: sumAuditAdmin };
+    totalRow2.getCell(15).value = { formula: `SUM(O${startRowProcuraAudit}:O${endRowProcuraAudit})`, result: sumAuditLanded };
+    totalRow2.getCell(18).value = { formula: `SUM(R${startRowProcuraAudit}:R${endRowProcuraAudit})`, result: sumAuditVentaNeto };
+    totalRow2.getCell(19).value = { formula: `SUM(S${startRowProcuraAudit}:S${endRowProcuraAudit})`, result: sumAuditVentaIVA };
 
-  sheet2.columns = [
-    { width: 8 },  // Ítem
-    { width: 45 }, // Descripción
-    { width: 8 },  // Cantidad
-    { width: 18 }, // FOB
-    { width: 15 }, // Flete
-    { width: 15 }, // Seguro
-    { width: 18 }, // CIF
-    { width: 15 }, // Arancel
-    { width: 15 }, // Despacho
-    { width: 15 }, // Flete Local
-    { width: 15 }, // Financiero
-    { width: 15 }, // Admin
-    { width: 22 }, // Landed Cost
-    { width: 12 }, // Margen
-    { width: 20 }, // Venta Neto
-    { width: 20 }  // Venta c/ IVA
-  ];
+    totalRow2.eachCell(c => { c.font = blackFontBold; c.border = thinBorder; });
+    [4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19].forEach(col => totalRow2.getCell(col).numFmt = moneyFormat);
+    totalRow2.fill = sectionFill;
+  }
+
 
   // =========================================================================
-  // HOJA 3: Auditoría SSTT (Método de Control Total)
+  // HOJA 3: Auditoría SSTT y Apoyos Especiales (Arquitectura Completa y Transparente)
   // =========================================================================
   const sheet3 = workbook.addWorksheet('Auditoría SSTT');
+  const colsSheet3 = [6, 40, 13, 7, 10, 10, 18, 18, 18, 16, 16, 20, 20, 18, 18, 18, 20, 11, 20, 22];
+  colsSheet3.forEach((w, i) => { sheet3.getColumn(i + 1).width = w; });
 
-  sheet3.columns = [
-    { width: 8 },  // Ítem
-    { width: 45 }, // Descripción
-    { width: 20 }, // Tipo Estimación
-    { width: 20 }, // Costo Equipos/Tecnología
-    { width: 18 }, // Costo MO
-    { width: 18 }, // Subcontratista
-    { width: 15 }, // Margen Tercerizado
-    { width: 15 }, // Service Fee (%)
-    { width: 18 }, // Service Fee Monto
-    { width: 18 }, // Amortización
-    { width: 22 }, // Subtotal Costo Directo
-    { width: 20 }, // Logística/Viáticos
-    { width: 20 }, // Imprevistos
-    { width: 20 }, // Apoyos/Alq.
-    { width: 25 }, // Gastos Admin Globales
-    { width: 20 }, // Costo Total Real
-    { width: 12 }, // Margen (%)
-    { width: 20 }, // Precio Venta Neto
-    { width: 20 }  // Precio Venta c/ IVA
-  ];
-
-  sheet3.mergeCells('A1:S2');
+  sheet3.mergeCells('A1:T2');
   const title3 = sheet3.getCell('A1');
-  title3.value = 'AUDITORÍA GERENCIAL - SERVICIOS Y MANO DE OBRA (SSTT)';
+  title3.value = 'AUDITORÍA GERENCIAL - SERVICIOS TÉCNICOS Y EQUIPOS DE APOYO (SSTT)';
   title3.fill = blueFill;
-  title3.font = { ...whiteFont, size: 16 };
+  title3.font = { ...whiteFont, size: 15 };
   title3.alignment = { vertical: 'middle', horizontal: 'center' };
 
   sheet3.addRow([]);
 
   const headersSheet3 = [
     'Ítem',
-    'Descripción',
-    'Tipo Estimación',
-    `Costo Equipos/Mat. (${moneda})`,
-    `Costo MO (${moneda})`,
-    `Subcontratista (${moneda})`,
-    `Margen Tercerizado (%)`,
-    `Service Fee (%)`,
-    `Service Fee Monto (${moneda})`,
-    `Amortización (${moneda})`,
-    `Subtotal Costo Directo (${moneda})`,
-    `Logística/Viáticos (${moneda})`,
-    `Imprevistos (${moneda})`,
-    `Apoyos/Alq. (${moneda})`,
-    `Gastos Admin Globales (${moneda})`,
+    'Descripción del Servicio',
+    'Estrategia',
+    'Cant.',
+    'Horas Eq.',
+    'Horas Serv.',
+    `Costo Tecnol. Unit. (${moneda})`,
+    `Costo MO Unit. (${moneda})`,
+    `Subcontrato Unit. (${moneda})`,
+    `Fee Unit. (${moneda})`,
+    `Amort. Unit. (${moneda})`,
+    `Subtotal Directo Unit. (${moneda})`,
+    `Subtotal Directo Total (${moneda})`,
+    `Logística Total (${moneda})`,
+    `Imprevistos Total (${moneda})`,
+    `Gastos Admin Total (${moneda})`,
     `Costo Total Real (${moneda})`,
     'Margen (%)',
-    `Precio Venta Neto (${moneda})`,
-    `Precio Venta c/ IVA (${moneda})`
+    `PU c/ IVA (${moneda})`,
+    `PT c/ IVA (${moneda})`
   ];
   
   const headerRow3 = sheet3.addRow(headersSheet3);
@@ -430,166 +683,266 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
     cell.font = whiteFont;
     cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   });
-  headerRow3.height = 40;
+  headerRow3.height = 36;
 
-  let totEquiposSSTT = 0, totMOSSTT = 0, totSubSSTT = 0, totFeeMontoSSTT = 0;
-  let totAmortSSTT = 0, totSubtotalDirSSTT = 0, totLogSSTT = 0, totImpSSTT = 0;
-  let totAlqSSTT = 0, totAdminSSTT = 0, totRealSSTT = 0;
-  let totNetoSSTT = 0, totIVASSTT = 0;
-  let indexSSTT = 1;
+  let startRowSSTTAudit = null;
+  let endRowSSTTAudit = null;
+  let idxSSTT = 1;
 
-  itemsProcesados.filter(i => i.tipo === 'Servicio').forEach(item => {
-    // Salvaguarda: Convertimos los costos base brutos a la moneda seleccionada (convertir() ya hace monedaTrabajo === 'USD' ? val / tipoCambio : val)
-    const cTecnologia = convertir(item.Costo_Tecnologia_Item || 0);
-    const cMO = convertir(item.Costo_MO_Item || 0);
-    const cSubcontrato = convertir(item.Costo_Subcontrato_Item || 0);
-    const mSubcontrato = (item.Margen_Subcontrato_Item || 0) / 100;
-    const mServiceFee = (item.margenServiceFee || 0) / 100;
-    const cServiceFeeMonto = convertir(item.costoServiceFee || 0);
-    const cAmort = convertir(item.costoAmortizacion || 0);
-    
-    // Subtotal Costo Directo = Tec + MO + Sub + ServiceFeeMonto + Amortización
-    const cSubtotalDirecto = cTecnologia + cMO + cSubcontrato + cServiceFeeMonto + cAmort;
+  let sumSSTTCant = 0;
+  let sumSSTTHorasEq = 0, sumSSTTHorasServ = 0, sumSSTTTec = 0, sumSSTTMO = 0;
+  let sumSSTTSubc = 0, sumSSTTFee = 0, sumSSTTAmort = 0;
+  let sumSSTTSubDirectoUnit = 0, sumSSTTSubDirectoTotal = 0;
+  let sumSSTTLog = 0, sumSSTTImp = 0, sumSSTTAdmin = 0;
+  let sumSSTTCostoReal = 0, sumSSTTVentaNeto = 0, sumSSTTVentaIVA = 0;
 
-    // Prorrateo SSTT global (el prorrateoAsignado ya viene convertido por excelExport en líneas superiores si aplica, aunque la bolsa es independiente)
-    // Wait, let's keep propLog exact logic as before to avoid breaking the isolation
-    const propLog = sumaCostosIndirectos > 0 ? logisticaGlobal / sumaCostosIndirectos : 0;
-    const propImp = sumaCostosIndirectos > 0 ? gastosImprevistos / sumaCostosIndirectos : 0;
-    const propAlq = sumaCostosIndirectos > 0 ? apoyosYAlquileres / sumaCostosIndirectos : 0;
-    const propAdmin = sumaCostosIndirectos > 0 ? gastosAdminSSTT / sumaCostosIndirectos : 0;
+  itemsSSTT.forEach(item => {
+    const qty = item.cantidad;
+    sumSSTTCant += qty;
+    sumSSTTHorasEq += item.horas_equipo * qty;
+    sumSSTTHorasServ += item.horas_servicio * qty;
+    sumSSTTTec += item.cTec;
+    sumSSTTMO += item.cMO;
+    sumSSTTSubc += item.cSubc;
+    sumSSTTFee += item.cFee;
+    sumSSTTAmort += item.cAmort;
+    sumSSTTSubDirectoUnit += item.subtotalDirectoUnit;
+    sumSSTTSubDirectoTotal += item.subtotalDirectoTotal;
+    sumSSTTLog += item.logAsignada;
+    sumSSTTImp += item.impAsignado;
+    sumSSTTAdmin += item.adminAsignado;
+    sumSSTTCostoReal += item.costoTotalReal;
+    sumSSTTVentaNeto += item.precioVentaNeto;
+    sumSSTTVentaIVA += item.precioVentaConIVA;
 
-    const cLog = item.prorrateoAsignado * propLog;
-    const cImp = item.prorrateoAsignado * propImp;
-    const cAlq = (item.prorrateoAsignado * propAlq) + (item.Total_Alquileres || 0); // Total_Alquileres ya venía convertido si aplica
-    const cAdminGlobal = item.prorrateoAsignado * propAdmin; // Antes sumaba costoServiceFee, ahora lo separamos
+    let nombreItem = item.descripcion || item.item || item.equipo || 'Servicio Técnico';
+    if (item.esTercerizado && item.modo_subcontrato === 'jornal') {
+      const cEspDia = safeNum(convertir(item.sub_esp_costo_dia || 0, 'PYG'));
+      const cAuxDia = safeNum(convertir(item.sub_aux_costo_dia || 0, 'PYG'));
+      const formatNum = (v) => Math.round(v).toLocaleString();
+      nombreItem += ` [Subc: ${item.sub_esp_cant || 0} Esp @ ${moneda === 'USD' ? '$' : 'Gs.'}${formatNum(cEspDia)} + ${item.sub_aux_cant || 0} Aux @ ${moneda === 'USD' ? '$' : 'Gs.'}${formatNum(cAuxDia)}]`;
+    }
 
     const row = sheet3.addRow([
-      indexSSTT++,
-      item.descripcion || item.item || 'Ítem sin nombre',
-      item.estrategia || 'Normal',
-      cTecnologia,
-      cMO,
-      cSubcontrato,
-      mSubcontrato,
-      mServiceFee,
-      cServiceFeeMonto,
-      cAmort,
-      cSubtotalDirecto,
-      cLog,
-      cImp,
-      cAlq,
-      cAdminGlobal,
-      item.costoTotalReal,
+      idxSSTT++,
+      nombreItem,
+      item.esTercerizado ? 'Subcontrato' : (item.estrategia || 'Normal'),
+      qty,
+      item.horas_equipo,
+      item.horas_servicio,
+      item.cTec,
+      item.cMO,
+      item.cSubc,
+      item.cFee,
+      item.cAmort,
+      0, // Col 12: Subtotal Directo Unit
+      0, // Col 13: Subtotal Directo Total
+      item.logAsignada,
+      item.impAsignado,
+      item.adminAsignado,
+      0, // Col 17: Costo Total Real
       item.margen,
-      item.precioVentaNeto,
-      item.precioVentaConIVA
+      0, // Col 19: PU c/ IVA
+      0  // Col 20: PT c/ IVA
     ]);
 
-    [4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19].forEach(col => row.getCell(col).numFmt = moneyFormat);
-    [7, 8, 17].forEach(col => row.getCell(col).numFmt = percentFormat);
-    row.getCell(1).alignment = { horizontal: 'center' };
+    const r = row.number;
+    if (!startRowSSTTAudit) startRowSSTTAudit = r;
+    endRowSSTTAudit = r;
 
-    totEquiposSSTT += cTecnologia;
-    totMOSSTT += cMO;
-    totSubSSTT += cSubcontrato;
-    totFeeMontoSSTT += cServiceFeeMonto;
-    totAmortSSTT += cAmort;
-    totSubtotalDirSSTT += cSubtotalDirecto;
-    totLogSSTT += cLog;
-    totImpSSTT += cImp;
-    totAlqSSTT += cAlq;
-    totAdminSSTT += cAdminGlobal;
-    totRealSSTT += item.costoTotalReal;
-    totNetoSSTT += item.precioVentaNeto;
-    totIVASSTT += item.precioVentaConIVA;
+    row.getCell(12).value = { formula: `G${r}+H${r}+I${r}+J${r}+K${r}`, result: item.subtotalDirectoUnit };
+    row.getCell(13).value = { formula: `D${r}*L${r}`, result: item.subtotalDirectoTotal };
+    row.getCell(17).value = { formula: `M${r}+N${r}+O${r}+P${r}`, result: item.costoTotalReal };
+    row.getCell(19).value = { formula: `T${r}/D${r}`, result: item.precioUnitarioConIVA };
+    row.getCell(20).value = { formula: `(Q${r}/(1-R${r}))*1.10`, result: item.precioVentaConIVA };
+
+    [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20].forEach(col => row.getCell(col).numFmt = moneyFormat);
+    row.getCell(18).numFmt = percentFormat;
+    row.getCell(1).alignment = { horizontal: 'center' };
+    row.getCell(3).alignment = { horizontal: 'center' };
+    row.getCell(4).alignment = { horizontal: 'center' };
+    row.getCell(5).alignment = { horizontal: 'center' };
+    row.getCell(6).alignment = { horizontal: 'center' };
+    row.eachCell(c => c.border = thinBorder);
   });
 
-  sheet3.addRow([]);
-  const totalRow3 = sheet3.addRow([
-    '', 'TOTALES SSTT:', '',
-    totEquiposSSTT, totMOSSTT, totSubSSTT, '', '', totFeeMontoSSTT, totAmortSSTT, totSubtotalDirSSTT,
-    totLogSSTT, totImpSSTT, totAlqSSTT, totAdminSSTT, totRealSSTT, '', totNetoSSTT, totIVASSTT
-  ]);
-  
-  totalRow3.eachCell(cell => { cell.font = blackFontBold; });
-  [4, 5, 6, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19].forEach(col => totalRow3.getCell(col).numFmt = moneyFormat);
+  let rowNumTotalesSSTT = null;
+  if (startRowSSTTAudit && endRowSSTTAudit) {
+    sheet3.addRow([]);
+    const totalRow3 = sheet3.addRow(['', 'TOTALES SERVICIOS TÉCNICOS:', '']);
+    rowNumTotalesSSTT = totalRow3.number;
 
-  // Lógica de Pólizas para Licitación
-  if (esLicitacion) {
-    sheet3.addRow([]); // Espacio
-    const polizasTitle = sheet3.addRow(['', 'PÓLIZAS REQUERIDAS DEL PROYECTO GLOBAL (LICITACIÓN)', '', '', '', '', '', '', '', '', '', '', '']);
-    polizasTitle.getCell(2).font = { ...blackFontBold, color: { argb: 'FF003366' } };
-    
-    // Se calculan sobre el Total General (Procura + SSTT)
-    const granTotalIVA = totProcuraIVA + totIVASSTT;
-    const fielCumplimiento = granTotalIVA * 0.05;
-    const anticipo = granTotalIVA * 0.20;
+    totalRow3.getCell(4).value = { formula: `SUM(D${startRowSSTTAudit}:D${endRowSSTTAudit})`, result: sumSSTTCant };
+    totalRow3.getCell(5).value = { formula: `SUM(E${startRowSSTTAudit}:E${endRowSSTTAudit})`, result: sumSSTTHorasEq };
+    totalRow3.getCell(6).value = { formula: `SUM(F${startRowSSTTAudit}:F${endRowSSTTAudit})`, result: sumSSTTHorasServ };
+    totalRow3.getCell(7).value = { formula: `SUM(G${startRowSSTTAudit}:G${endRowSSTTAudit})`, result: sumSSTTTec };
+    totalRow3.getCell(8).value = { formula: `SUM(H${startRowSSTTAudit}:H${endRowSSTTAudit})`, result: sumSSTTMO };
+    totalRow3.getCell(9).value = { formula: `SUM(I${startRowSSTTAudit}:I${endRowSSTTAudit})`, result: sumSSTTSubc };
+    totalRow3.getCell(10).value = { formula: `SUM(J${startRowSSTTAudit}:J${endRowSSTTAudit})`, result: sumSSTTFee };
+    totalRow3.getCell(11).value = { formula: `SUM(K${startRowSSTTAudit}:K${endRowSSTTAudit})`, result: sumSSTTAmort };
+    totalRow3.getCell(12).value = { formula: `SUM(L${startRowSSTTAudit}:L${endRowSSTTAudit})`, result: sumSSTTSubDirectoUnit };
+    totalRow3.getCell(13).value = { formula: `SUM(M${startRowSSTTAudit}:M${endRowSSTTAudit})`, result: sumSSTTSubDirectoTotal };
+    totalRow3.getCell(14).value = { formula: `SUM(N${startRowSSTTAudit}:N${endRowSSTTAudit})`, result: sumSSTTLog };
+    totalRow3.getCell(15).value = { formula: `SUM(O${startRowSSTTAudit}:O${endRowSSTTAudit})`, result: sumSSTTImp };
+    totalRow3.getCell(16).value = { formula: `SUM(P${startRowSSTTAudit}:P${endRowSSTTAudit})`, result: sumSSTTAdmin };
+    totalRow3.getCell(17).value = { formula: `SUM(Q${startRowSSTTAudit}:Q${endRowSSTTAudit})`, result: sumSSTTCostoReal };
+    totalRow3.getCell(20).value = { formula: `SUM(T${startRowSSTTAudit}:T${endRowSSTTAudit})`, result: sumSSTTVentaIVA };
 
-    const rowFiel = sheet3.addRow(['', 'Póliza Fiel Cumplimiento (5%)', '', '', '', '', '', '', '', '', '', '', fielCumplimiento]);
-    const rowAnticipo = sheet3.addRow(['', 'Póliza de Anticipo (20%)', '', '', '', '', '', '', '', '', '', '', anticipo]);
-    
-    rowFiel.getCell(13).numFmt = moneyFormat;
-    rowAnticipo.getCell(13).numFmt = moneyFormat;
+    totalRow3.eachCell(c => { c.font = blackFontBold; c.border = thinBorder; });
+    [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20].forEach(col => totalRow3.getCell(col).numFmt = moneyFormat);
+    totalRow3.fill = sectionFill;
   }
 
-  sheet3.columns = [
-    { width: 8 },  // Ítem
-    { width: 45 }, // Descripción
-    { width: 20 }, // Equipos
-    { width: 18 }, // MO
-    { width: 20 }, // Logística
-    { width: 18 }, // Imprevistos
-    { width: 18 }, // Alquileres
-    { width: 18 }, // Fee
-    { width: 18 }, // Amortización
-    { width: 20 }, // Costo Real
-    { width: 15 }, // Margen
-    { width: 22 }, // Venta Neto
-    { width: 22 }  // Venta c/ IVA
-  ];
+  // --- TABLA DE ALQUILERES ESPECIALES EN HOJA 3 ---
+  let startRowAlqAudit = null;
+  let endRowAlqAudit = null;
+
+  if (itemsAlquileres.length > 0) {
+    sheet3.addRow([]);
+    const titleAlqRow = sheet3.addRow([]);
+    titleAlqRow.getCell(2).value = 'DESGLOSE DE ALQUILERES ESPECIALES Y EQUIPOS DE APOYO PESADO';
+    titleAlqRow.getCell(2).font = { ...blackFontBold, color: { argb: 'FF003366' } };
+
+    itemsAlquileres.forEach(item => {
+      const row = sheet3.addRow([
+        idxSSTT++,
+        item.descripcion || item.nombre || 'Alquiler Especial de Equipo',
+        'Alquiler Especial',
+        item.cantidad,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        item.costoUnitConvertido, // Col 12: Subtotal Directo Unit
+        0,                        // Col 13: Subtotal Directo Total
+        0,                        // Col 14: Logística
+        0,                        // Col 15: Imprevistos
+        0,                        // Col 16: Admin
+        0,                        // Col 17: Costo Total Real
+        item.margen,              // Col 18: Margen
+        0,                        // Col 19: PU c/ IVA
+        0                         // Col 20: PT c/ IVA
+      ]);
+
+      const r = row.number;
+      if (!startRowAlqAudit) startRowAlqAudit = r;
+      endRowAlqAudit = r;
+
+      row.getCell(13).value = { formula: `D${r}*L${r}`, result: item.costoTotal };
+      row.getCell(17).value = { formula: `M${r}+N${r}+O${r}+P${r}`, result: item.costoTotal };
+      row.getCell(19).value = { formula: `T${r}/D${r}`, result: item.precioUnitarioConIVA };
+      row.getCell(20).value = { formula: `(Q${r}/(1-R${r}))*1.10`, result: item.precioVentaConIVA };
+
+      [12, 13, 14, 15, 16, 17, 19, 20].forEach(col => row.getCell(col).numFmt = moneyFormat);
+      row.getCell(18).numFmt = percentFormat;
+      row.getCell(1).alignment = { horizontal: 'center' };
+      row.getCell(3).alignment = { horizontal: 'center' };
+      row.getCell(4).alignment = { horizontal: 'center' };
+      row.eachCell(c => c.border = thinBorder);
+    });
+
+    const sumAlqCant = itemsAlquileres.reduce((acc, i) => acc + i.cantidad, 0);
+    const sumAlqCosto = itemsAlquileres.reduce((acc, i) => acc + i.costoTotal, 0);
+    const sumAlqIVA = itemsAlquileres.reduce((acc, i) => acc + i.precioVentaConIVA, 0);
+
+    const totalRowAlq = sheet3.addRow(['', 'TOTALES ALQUILERES ESPECIALES:', '']);
+    totalRowAlq.getCell(4).value = { formula: `SUM(D${startRowAlqAudit}:D${endRowAlqAudit})`, result: sumAlqCant };
+    totalRowAlq.getCell(13).value = { formula: `SUM(M${startRowAlqAudit}:M${endRowAlqAudit})`, result: sumAlqCosto };
+    totalRowAlq.getCell(17).value = { formula: `SUM(Q${startRowAlqAudit}:Q${endRowAlqAudit})`, result: sumAlqCosto };
+    totalRowAlq.getCell(20).value = { formula: `SUM(T${startRowAlqAudit}:T${endRowAlqAudit})`, result: sumAlqIVA };
+
+    totalRowAlq.eachCell(c => { c.font = blackFontBold; c.border = thinBorder; });
+    [4, 12, 13, 17, 20].forEach(col => totalRowAlq.getCell(col).numFmt = moneyFormat);
+    totalRowAlq.fill = sectionFill;
+  }
+
+  // Pólizas de Licitación (Hoja 3)
+  if (esLicitacion) {
+    sheet3.addRow([]);
+    const polizasTitle = sheet3.addRow([]);
+    polizasTitle.getCell(2).value = 'PÓLIZAS REQUERIDAS DEL PROYECTO (LICITACIÓN PÚBLICA)';
+    polizasTitle.getCell(2).font = { ...blackFontBold, color: { argb: 'FF003366' } };
+
+    const totalVentaSSTT_Alq_IVA = (itemsSSTT.reduce((acc, i) => acc + i.precioVentaConIVA, 0)) +
+                                   (itemsAlquileres.reduce((acc, i) => acc + i.precioVentaConIVA, 0));
+
+    const rowFiel = sheet3.addRow([]);
+    rowFiel.getCell(2).value = 'Póliza Fiel Cumplimiento de Contrato (5% Total c/ IVA)';
+    rowFiel.getCell(20).value = { 
+      formula: rowNumTotalesSSTT && endRowAlqAudit 
+        ? `(T${rowNumTotalesSSTT}+T${endRowAlqAudit + 1})*0.05` 
+        : (rowNumTotalesSSTT ? `T${rowNumTotalesSSTT}*0.05` : '0'), 
+      result: totalVentaSSTT_Alq_IVA * 0.05 
+    };
+    rowFiel.getCell(20).numFmt = moneyFormat;
+    rowFiel.getCell(2).font = metaValFont;
+
+    const rowAnticipo = sheet3.addRow([]);
+    rowAnticipo.getCell(2).value = 'Póliza de Anticipo Financiero (20% Total c/ IVA)';
+    rowAnticipo.getCell(20).value = { 
+      formula: rowNumTotalesSSTT && endRowAlqAudit 
+        ? `(T${rowNumTotalesSSTT}+T${endRowAlqAudit + 1})*0.20` 
+        : (rowNumTotalesSSTT ? `T${rowNumTotalesSSTT}*0.20` : '0'), 
+      result: totalVentaSSTT_Alq_IVA * 0.20 
+    };
+    rowAnticipo.getCell(20).numFmt = moneyFormat;
+    rowAnticipo.getCell(2).font = metaValFont;
+  }
+
 
   // =========================================================================
   // HOJA 4: Condiciones Comerciales
   // =========================================================================
   const sheet4 = workbook.addWorksheet('Condiciones Comerciales');
+  const colsSheet4 = [32, 95];
+  colsSheet4.forEach((w, i) => { sheet4.getColumn(i + 1).width = w; });
 
   sheet4.mergeCells('A1:B2');
   const title4 = sheet4.getCell('A1');
-  title4.value = 'CONDICIONES COMERCIALES';
+  title4.value = 'CONDICIONES COMERCIALES DE LA OFERTA';
   title4.fill = blueFill;
-  title4.font = { ...whiteFont, size: 16 };
+  title4.font = { ...whiteFont, size: 15 };
   title4.alignment = { vertical: 'middle', horizontal: 'center' };
 
   sheet4.addRow([]);
 
   const condiciones = [
     ['Validez de la Oferta:', '30 días calendario a partir de la fecha de emisión.'],
-    ['Plazo de Entrega:', 'A convenir según cronograma de obra y disponibilidad de equipos.'],
-    ['Lugar de Entrega:', 'Incoterm DDP / Obra (según lo acordado).'],
-    ['Garantía:', '12 meses contra defectos de fabricación. No cubre mala operación.'],
-    ['Forma de Pago:', esLicitacion ? 'Según pliego de bases y condiciones (Anticipo 20%, saldo contra avance).' : '30% Anticipo, 70% contra entrega de equipos.'],
-    ['Impuestos:', 'Los precios indicados en la Propuesta Comercial INCLUYEN IVA (10%).'],
-    ['Moneda:', `Oferta expresada en ${moneda}.`]
+    ['Plazo de Ejecución y Entrega:', 'A convenir según cronograma ejecutivo de obra y disponibilidad de equipos.'],
+    ['Lugar de Entrega (Incoterm):', 'DDP / En Sitio de Obra (según lo acordado en especificaciones técnicas).'],
+    ['Garantía Técnica:', '12 meses contra defectos de fabricación / vicios ocultos a partir de la puesta en servicio.'],
+    ['Forma de Pago:', esLicitacion ? 'Según Pliego de Bases y Condiciones (Anticipo 20%, saldo contra certificados de avance mensual).' : '30% Anticipo a la orden de compra, 70% contra entrega de equipos y actas de servicio.'],
+    ['Impuesto al Valor Agregado (IVA):', 'Todos los precios unitarios y totales de la presente oferta INCLUYEN IVA (10%) conforme a la Ley N° 6380/19.'],
+    ['Moneda y Tipo de Cambio:', `Oferta expresada en ${moneda}.${moneda === 'USD' ? ` Tasa de cambio de referencia fijada en 1 USD = ${Number(tasaCambio).toLocaleString('es-PY')} PYG.` : ''}`],
+    ['Propiedad Intelectual:', 'La presente cotización y sus anexos de ingeniería son de carácter estrictamente confidencial para uso exclusivo del cliente receptor.']
   ];
 
   condiciones.forEach(cond => {
     const row = sheet4.addRow(cond);
     row.getCell(1).font = blackFontBold;
+    row.getCell(2).font = metaValFont;
     row.getCell(2).alignment = { wrapText: true, vertical: 'top' };
-    row.height = 30;
+    row.height = 28;
+    row.eachCell(c => c.border = thinBorder);
   });
 
-  sheet4.columns = [
-    { width: 30 }, // Título condición
-    { width: 90 }  // Descripción condición
-  ];
-
-  // --- 3. EXPORTAR ARCHIVO ---
+  // --- 5. EXPORTAR ARCHIVO CON NOMBRE DINÁMICO ---
   const buffer = await workbook.xlsx.writeBuffer();
-  const fecha = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  const sufijo = esLicitacion ? 'Licitacion' : 'Privado';
-  const fileName = `Cotizacion_Beigel_${sufijo}_${fecha}.xlsx`;
+  const fechaISO = new Date().toISOString().split('T')[0];
+  const sanitizar = (str) => (str || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+  
+  let nombreArchivo = 'Cotizacion_Beigel';
+  if (cliente && proyecto) {
+    nombreArchivo = `Cotizacion_${sanitizar(cliente)}_${sanitizar(proyecto)}_${fechaISO}.xlsx`;
+  } else if (cliente) {
+    nombreArchivo = `Cotizacion_${sanitizar(cliente)}_${fechaISO}.xlsx`;
+  } else {
+    nombreArchivo = `Cotizacion_Beigel_${esLicitacion ? 'Licitacion' : 'Privado'}_${fechaISO}.xlsx`;
+  }
   
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  saveAs(blob, fileName);
+  saveAs(blob, nombreArchivo);
 };

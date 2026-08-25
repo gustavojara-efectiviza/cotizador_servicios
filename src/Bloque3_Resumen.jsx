@@ -10,7 +10,12 @@ export default function Bloque3_Resumen({
   detalleServicios = [],
   tipoCambio = 7500,
   monedaTrabajo = 'USD',
+  nombreCliente = '',
+  nombreProyecto = '',
+  alquileres = [],
+  gastosImprevistos = 0,
   esLicitacion = true,
+  resultadosSSTT = null,
   onGuardar,
   isSaving,
   copilotRef
@@ -84,17 +89,26 @@ export default function Bloque3_Resumen({
       const qty = item.cantidad || 1;
       const costoDirUnitario = item.costo_directo_unitario || 0;
       const precioFinalUnitario = item.precio_unitario_final || 0;
+      const precioFinalTotal = item.precio_total_final || (precioFinalUnitario * qty);
+      const costoTotalReal = item.costo_total_real || (costoDirUnitario * qty);
       
-      let margenCalc = 0;
-      if (precioFinalUnitario > costoDirUnitario && precioFinalUnitario > 0) {
-         margenCalc = 1 - (costoDirUnitario / precioFinalUnitario);
-      }
+      const margenReal = item.margen !== undefined 
+        ? item.margen 
+        : (precioFinalTotal > 0 && precioFinalTotal > costoTotalReal 
+            ? (1 - (costoTotalReal / precioFinalTotal)) 
+            : 0.30);
 
       return {
         descripcion: item.equipo || item.nombre || 'Servicio Especializado',
         cantidad: qty,
         costoBase: costoDirUnitario,
-        margen: margenCalc,
+        margen: margenReal,
+        precio_unitario_final: precioFinalUnitario,
+        precio_total_final: precioFinalTotal,
+        costo_total_real: costoTotalReal,
+        logAsignada: item.logAsignada || 0,
+        impAsignado: item.impAsignado || 0,
+        adminAsignado: item.adminAsignado || 0,
         moneda: 'PYG',
         estrategia: item.estrategia || 'Normal',
         Costo_Tecnologia_Item: Number(item.Costo_Tecnologia_Item) || 0,
@@ -103,23 +117,51 @@ export default function Bloque3_Resumen({
         Margen_Subcontrato_Item: Number(item.Margen_Subcontrato_Item) || 0,
         costoServiceFee: Number(item.costoServiceFee) || 0,
         margenServiceFee: Number(item.margenServiceFee) || 0,
-        costoAmortizacion: Number(item.costoAmortizacion) || 0
+        costoAmortizacion: Number(item.costoAmortizacion) || 0,
+        horas_equipo: (item.is_tercerizado || item.estrategia === 'Subcontrato') ? 0 : (item.horas_equipo ?? item.overrides?.horas_equipo ?? 0),
+        horas_servicio: (item.is_tercerizado || item.estrategia === 'Subcontrato') ? 0 : (item.horas_servicio ?? item.overrides?.horas_servicio ?? 0),
+        modo_subcontrato: item.modo_subcontrato || item.overrides?.modo_subcontrato || 'fijo',
+        sub_esp_cant: Number(item.sub_esp_cant || item.overrides?.sub_esp_cant) || 0,
+        sub_esp_costo_dia: Number(item.sub_esp_costo_dia || item.overrides?.sub_esp_costo_dia) || 0,
+        sub_esp_dias: Number(item.sub_esp_dias || item.overrides?.sub_esp_dias) || 0,
+        sub_aux_cant: Number(item.sub_aux_cant || item.overrides?.sub_aux_cant) || 0,
+        sub_aux_costo_dia: Number(item.sub_aux_costo_dia || item.overrides?.sub_aux_costo_dia) || 0,
+        sub_aux_dias: Number(item.sub_aux_dias || item.overrides?.sub_aux_dias) || 0
       };
     });
 
-    // 3. NORMALIZAR MONEDA DE COSTOS GLOBALES
-    // granTotal está siempre en PYG.
-    const contingenciaPYG = granTotal * 0.03;
-    const riesgosNormalizados = monedaTrabajo === 'USD' ? (contingenciaPYG / tipoCambio) : contingenciaPYG;
+    // 3. ADAPTADOR DE ALQUILERES ESPECIALES (Partida Visible e Independiente)
+    const alquileresAdaptados = (resultadosSSTT?.alquileresProcesados || alquileres || []).map(alq => {
+      const costo = Number(alq.costo || alq.costo_directo_unitario || alq.costoBase) || 0;
+      const precio = Number(alq.precio_unitario_final) || (costo * 1.30);
+      const margen = (precio > 0 && precio > costo) ? (1 - (costo / precio)) : 0.30;
+      return {
+        descripcion: alq.nombre || alq.descripcion || alq.equipo || 'Alquiler Especial / Equipo de Apoyo',
+        cantidad: Number(alq.cantidad) || 1,
+        costoBase: costo,
+        margen: margen,
+        precioFinal: precio,
+        moneda: 'PYG'
+      };
+    });
 
+    // 4. DATOS COMPLETOS PARA EXPORTACIÓN AUDITABLE
     const estadoGlobal = {
+      cliente: nombreCliente,
+      proyecto: nombreProyecto,
       equipos: procuraAdaptada,
       servicios: serviciosAdaptados,
-      viaticos: 0,
-      riesgos: riesgosNormalizados,
-      logistica: 0,
-      financieros: 0,
-      margenGlobal: 0.15,
+      alquileres: alquileresAdaptados,
+      logisticaGlobal: Number(resultadosSSTT?.Logistica_Global_Total) || 0,
+      gananciaLogistica: Number(resultadosSSTT?.Ganancia_Logistica) || 0,
+      precioVentaLogistica: Number(resultadosSSTT?.Precio_Venta_Logistica) || 0,
+      gastosImprevistos: Number(resultadosSSTT?.Gastos_Imprevistos ?? gastosImprevistos) || 0,
+      gananciaImprevistos: Number(resultadosSSTT?.Ganancia_Imprevistos) || 0,
+      gastosAdminSSTT: Number(resultadosSSTT?.Gastos_Administrativos) || 0,
+      precioVentaFinalSSTT: Number(resultadosSSTT?.Precio_Venta_Final) || 0,
+      viaticos: Number(resultadosSSTT?.Costo_Viaticos_Total) || 0,
+      hospedaje: Number(resultadosSSTT?.Costo_Hospedaje_Total) || 0,
+      movilidad: Number(resultadosSSTT?.Costo_Movilidad_Total) || 0,
       esLicitacion,
       moneda: monedaTrabajo,
       tasaCambio: tipoCambio

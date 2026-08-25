@@ -126,7 +126,7 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
     ]);
 
     itemsParaExcel.forEach(item => {
-      const horasUnitarias = (item.overrides?.horas_equipo ?? item.baseData?.horas_equipo ?? 0);
+      const horasUnitarias = (item.overrides?.horas_servicio ?? item.overrides?.horas_equipo ?? item.baseData?.horas_servicio ?? item.baseData?.horas_equipo ?? 0);
       const cantidad = item.cantidad || 1;
       const horasTotales = horasUnitarias * cantidad;
       
@@ -213,19 +213,13 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
     XLSX.writeFile(workbook, fileName);
   };
 
-  const Gran_Total_Utilidad_Neta = (resultados.Ganancia_Ingenieria || 0) + 
-    (resultados.Ganancia_Tecnologia_Total || 0) + 
-    (resultados.Ganancia_Logistica || 0) + 
-    (resultados.Ganancia_Imprevistos || 0) + 
-    (resultados.Ganancia_Tercerizados_Nuevos || 0) + 
-    (resultados.Ganancia_Alquileres || 0) + 
-    (resultados.Ganancia_ServiceFee_Total || 0) + 
-    (resultados.Ganancia_Amortizacion_Total || 0) + 
-    (resultados.Utilidad_Oculta_TopDown || 0);
+  const Gran_Total_Utilidad_Neta = resultados.Ganancia_Neta_Esperada !== undefined
+    ? resultados.Ganancia_Neta_Esperada
+    : ((resultados.Ganancia_Ingenieria || 0) + (resultados.Ganancia_Tercerizados_Nuevos || 0) + (resultados.Ganancia_Alquileres || 0));
 
-  const margenRealUI = resultados.Precio_Venta_Final > 0 
-    ? (Gran_Total_Utilidad_Neta / resultados.Precio_Venta_Final) * 100 
-    : 0;
+  const margenRealUI = resultados.Margen_Real_Porcentaje !== undefined 
+    ? resultados.Margen_Real_Porcentaje 
+    : (resultados.Precio_Venta_Final > 0 ? (Gran_Total_Utilidad_Neta / resultados.Precio_Venta_Final) * 100 : 0);
 
   // Calculamos la proporción de internos vs externos para el Audit Trail
   let totalPersonasInternas = 0;
