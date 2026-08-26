@@ -79,6 +79,8 @@ export default function EPCDashboard() {
   const [gastosImprevistos, setGastosImprevistos] = useState(0);
   const [margenImprevistosPorcentaje, setMargenImprevistosPorcentaje] = useState(0);
   const [condicionTrabajo, setCondicionTrabajo] = useState(1.0);
+  const [aplicarGastosIndirectos, setAplicarGastosIndirectos] = useState(true);
+  const [logisticsOverrides, setLogisticsOverrides] = useState({ enabled: false });
 
   // Estado Global Bloque 0
   const [nombreCliente, setNombreCliente] = useState('');
@@ -135,7 +137,9 @@ export default function EPCDashboard() {
           diasPermitidosCorte,
           gastosImprevistos,
           margenImprevistosPorcentaje,
-          condicionTrabajo
+          condicionTrabajo,
+          aplicarGastosIndirectos,
+          logisticsOverrides
         },
         totales: {
           totalProcura,
@@ -186,6 +190,8 @@ export default function EPCDashboard() {
     setGastosImprevistos(sstt.gastosImprevistos ?? quote.Gastos_Imprevistos ?? 0);
     setMargenImprevistosPorcentaje(sstt.margenImprevistosPorcentaje ?? quote.Margen_Imprevistos_Porcentaje ?? 0);
     setCondicionTrabajo(sstt.condicionTrabajo ?? quote.condicionTrabajo ?? 1.0);
+    setAplicarGastosIndirectos(sstt.aplicarGastosIndirectos !== undefined ? sstt.aplicarGastosIndirectos : (quote.aplicarGastosIndirectos ?? true));
+    setLogisticsOverrides(sstt.logisticsOverrides ?? quote.logisticsOverrides ?? { enabled: false });
 
     // Restaurar el ID para que el próximo guardado haga UPDATE, no INSERT
     setCotizacionId(quote.id || null);
@@ -207,6 +213,9 @@ export default function EPCDashboard() {
     setMargenImprevistosPorcentaje(0);
     setDistanciaKm(100);
     setDiasPermitidosCorte(3);
+    setCondicionTrabajo(1.0);
+    setAplicarGastosIndirectos(true);
+    setLogisticsOverrides({ enabled: false });
     setTotalProcura(0);
     setTotalServicios(0);
     setActiveBlock(1);
@@ -602,6 +611,10 @@ export default function EPCDashboard() {
                   setMargenImprevistosPorcentaje={setMargenImprevistosPorcentaje}
                   condicionTrabajo={condicionTrabajo}
                   setCondicionTrabajo={setCondicionTrabajo}
+                  aplicarGastosIndirectos={aplicarGastosIndirectos}
+                  setAplicarGastosIndirectos={setAplicarGastosIndirectos}
+                  logisticsOverrides={logisticsOverrides}
+                  setLogisticsOverrides={setLogisticsOverrides}
                   setTotalServicios={setTotalServicios} 
                   setDetalleServicios={setDetalleServicios} 
                   setResultadosSSTT={setResultadosSSTT}

@@ -154,9 +154,9 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
 
     return {
       ...item,
-      logAsignada: item.logAsignada || logAsignada,
-      impAsignado: item.impAsignado || impAsignado,
-      adminAsignado: item.adminAsignado || adminAsignado,
+      logAsignada,
+      impAsignado,
+      adminAsignado,
       costoTotalReal,
       margen,
       precioVentaNeto,

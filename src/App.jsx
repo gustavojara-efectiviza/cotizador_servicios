@@ -312,6 +312,8 @@ function App() {
     setIsDirty(true);
   };
 
+  const [aplicarGastosIndirectos, setAplicarGastosIndirectos] = useState(true);
+
   // Calculations
   const totalEsfuerzoHoras = cart.reduce((sum, item) => sum + (item.cantidad * (item.overrides?.horas_equipo ?? item.baseData.horas_equipo ?? 0)), 0);
 
@@ -325,6 +327,7 @@ function App() {
     Precio_Mercado_Aplicado: 0,
     Gastos_Imprevistos: gastosImprevistos,
     Margen_Imprevistos_Porcentaje: margenImprevistosPorcentaje,
+    aplicarGastosIndirectos: aplicarGastosIndirectos,
     logisticsOverrides: logisticsOverrides
   };
 
@@ -337,6 +340,7 @@ function App() {
     setDiasPermitidosCorte(quote.diasPermitidosCorte || quote.Dias_Permitidos_Corte || 3);
     setGastosImprevistos(quote.Gastos_Imprevistos || 0);
     setMargenImprevistosPorcentaje(quote.Margen_Imprevistos_Porcentaje || 0);
+    setAplicarGastosIndirectos(quote.aplicarGastosIndirectos !== undefined ? quote.aplicarGastosIndirectos : true);
     setLogisticsOverrides(quote.logisticsOverrides || { enabled: false });
     
     setCliente(quote.Cliente || '');
@@ -778,38 +782,126 @@ function App() {
           </div>
 
           {/* 3. Operaciones y Riesgos (Centro de Gastos Indirectos) */}
-          <div className="odoo-card">
-            <h2 style={{ marginBottom: '15px' }}><ShieldAlert size={20} /> Centro de Control de Gastos Indirectos</h2>
+          <div className="odoo-card" style={{
+            borderLeft: aplicarGastosIndirectos ? '4px solid var(--accent, #3b82f6)' : '4px solid #94a3b8',
+            transition: 'all 0.3s ease'
+          }}>
+            {/* Cabecera con Switch On/Off */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ShieldAlert size={22} color={aplicarGastosIndirectos ? '#2563eb' : '#64748b'} />
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '1.15rem', color: aplicarGastosIndirectos ? 'var(--text-primary)' : '#64748b' }}>
+                    Centro de Control de Gastos Indirectos
+                  </h2>
+                  <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                    {aplicarGastosIndirectos ? 'Logística, viáticos, hospedaje e imprevistos calculados' : 'Desactivado (0 Gs / 0 USD para cotizaciones de terceros)'}
+                  </span>
+                </div>
+              </div>
+
+              {/* SWITCH / TOGGLE */}
+              <div style={{
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '10px', 
+                background: aplicarGastosIndirectos ? '#eff6ff' : '#f1f5f9', 
+                padding: '6px 14px', 
+                borderRadius: '20px', 
+                border: aplicarGastosIndirectos ? '1px solid #bfdbfe' : '1px solid #cbd5e1'
+              }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: aplicarGastosIndirectos ? '#1e40af' : '#64748b' }}>
+                  {aplicarGastosIndirectos ? '🟢 Gastos Indirectos Activos' : '⚪ Centro en Cero (Terceros)'}
+                </span>
+                <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', margin: 0, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={aplicarGastosIndirectos}
+                    onChange={(e) => {
+                      setAplicarGastosIndirectos(e.target.checked);
+                      setIsDirty(true);
+                    }}
+                    style={{ opacity: 0, width: 0, height: 0 }}
+                  />
+                  <span style={{
+                    position: 'absolute',
+                    cursor: 'pointer',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: aplicarGastosIndirectos ? '#2563eb' : '#94a3b8',
+                    transition: '0.3s',
+                    borderRadius: '24px'
+                  }}>
+                    <span style={{
+                      position: 'absolute',
+                      content: '""',
+                      height: '18px',
+                      width: '18px',
+                      left: aplicarGastosIndirectos ? '22px' : '3px',
+                      bottom: '3px',
+                      backgroundColor: 'white',
+                      transition: '0.3s',
+                      borderRadius: '50%',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                    }}></span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {/* Banner explicativo cuando está en cero */}
+            {!aplicarGastosIndirectos && (
+              <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '1.3rem' }}>💡</span>
+                <div style={{ fontSize: '0.85rem', color: '#475569', lineHeight: '1.4' }}>
+                  <strong>Modo Servicios Tercerizados / Sin Despliegue Propio:</strong> La logística, viáticos, hospedajes, peajes e imprevistos están anulados en <strong>0 Gs.</strong> para que el precio de venta refleje exactamente la cotización directa de terceros sin recargos operativos internos.
+                </div>
+              </div>
+            )}
             
-            {/* Parámetros Básicos */}
-            <div className="config-grid" style={{ marginBottom: '20px' }}>
-              <div className="form-group">
-                <label>Distancia ida/vuelta (km)</label>
-                <input type="number" min="0" value={distanciaKm} onChange={(e) => { setDistanciaKm(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
+            {/* Contenido condicionado con opacidad visual */}
+            <div style={{ opacity: aplicarGastosIndirectos ? 1 : 0.45, pointerEvents: aplicarGastosIndirectos ? 'auto' : 'none', transition: 'opacity 0.2s' }}>
+              {/* Parámetros Básicos */}
+              <div className="config-grid" style={{ marginBottom: '20px' }}>
+                <div className="form-group">
+                  <label>Distancia ida/vuelta (km)</label>
+                  <input type="number" min="0" value={distanciaKm} onChange={(e) => { setDistanciaKm(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
+                </div>
+                <div className="form-group">
+                  <label>Días Permitidos (Corte)</label>
+                  <input type="number" min="1" value={diasPermitidosCorte} onChange={(e) => { setDiasPermitidosCorte(parseInt(e.target.value) || 1); setIsDirty(true); }} />
+                </div>
               </div>
-              <div className="form-group">
-                <label>Días Permitidos (Corte)</label>
-                <input type="number" min="1" value={diasPermitidosCorte} onChange={(e) => { setDiasPermitidosCorte(parseInt(e.target.value) || 1); setIsDirty(true); }} />
+
+              {/* Modal Logistico Button */}
+              <div style={{ marginBottom: '20px', padding: '15px', background: '#f1f5f9', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <strong style={{ display: 'block', color: 'var(--text-primary)' }}>Auditoría Logística y RRHH</strong>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Ajusta viáticos, hospedaje y movilidad</span>
+                </div>
+                <button 
+                  className="primary-btn" 
+                  onClick={() => setShowLogisticsModal(true)} 
+                  style={{ width: 'auto', padding: '8px 16px', background: logisticsOverrides?.enabled ? '#10b981' : 'var(--accent)' }}
+                >
+                  <Settings size={16} /> Configuración {logisticsOverrides?.enabled ? '(Manual)' : '(Auto)'}
+                </button>
+              </div>
+
+              {/* Imprevistos */}
+              <div className="config-grid" style={{ marginBottom: '20px' }}>
+                <div className="form-group">
+                  <label>Gastos Imprevistos Fijos (Gs.)</label>
+                  <input type="number" min="0" value={gastosImprevistos} onChange={(e) => { setGastosImprevistos(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
+                </div>
+                <div className="form-group">
+                  <label>Margen Adicional Imprevistos (%)</label>
+                  <input type="number" min="0" value={margenImprevistosPorcentaje} onChange={(e) => { setMargenImprevistosPorcentaje(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
+                </div>
               </div>
             </div>
 
-            {/* Modal Logistico Button */}
-            <div style={{ marginBottom: '20px', padding: '15px', background: '#f1f5f9', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <strong style={{ display: 'block', color: 'var(--text-primary)' }}>Auditoría Logística y RRHH</strong>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Ajusta viáticos, hospedaje y movilidad</span>
-              </div>
-              <button 
-                className="primary-btn" 
-                onClick={() => setShowLogisticsModal(true)} 
-                style={{ width: 'auto', padding: '8px 16px', background: logisticsOverrides?.enabled ? '#10b981' : 'var(--accent)' }}
-              >
-                <Settings size={16} /> Configuración {logisticsOverrides?.enabled ? '(Manual)' : '(Auto)'}
-              </button>
-            </div>
-
-            {/* Alquileres Especiales */}
-            <div style={{ marginBottom: '20px' }}>
+            {/* Alquileres Especiales (Siempre accesibles como partida independiente) */}
+            <div style={{ marginTop: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '15px' }}>
               <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', color: 'var(--text-primary)' }}>Servicios de Apoyo y Alquileres (Grúas, Fletes)</label>
               {alquileres.map((alq) => (
                 <div key={alq.id} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
@@ -821,18 +913,6 @@ function App() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
                 <button className="primary-btn" onClick={addAlquiler} style={{ width: 'auto', padding: '6px 12px', background: '#64748b' }}><Plus size={16} /> Agregar</button>
                 <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>Total: {formatGs(alquileres.reduce((sum, a) => sum + a.costo, 0))}</span>
-              </div>
-            </div>
-
-            {/* Imprevistos */}
-            <div className="config-grid">
-              <div className="form-group">
-                <label>Gastos Imprevistos Fijos (Gs.)</label>
-                <input type="number" min="0" value={gastosImprevistos} onChange={(e) => { setGastosImprevistos(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
-              </div>
-              <div className="form-group">
-                <label>Margen Adicional Imprevistos (%)</label>
-                <input type="number" min="0" value={margenImprevistosPorcentaje} onChange={(e) => { setMargenImprevistosPorcentaje(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
               </div>
             </div>
 

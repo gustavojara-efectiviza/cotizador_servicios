@@ -26,6 +26,10 @@ function Bloque2_SSTT({
   setMargenImprevistosPorcentaje,
   condicionTrabajo = 1.0,
   setCondicionTrabajo,
+  aplicarGastosIndirectos = true,
+  setAplicarGastosIndirectos,
+  logisticsOverrides = { enabled: false },
+  setLogisticsOverrides,
   // CALLBACKS AL PADRE
   setTotalServicios,
   setDetalleServicios,
@@ -42,8 +46,15 @@ function Bloque2_SSTT({
   const [cantidad, setCantidad] = useState(1);
   const [activeTab, setActiveTab] = useState('cotizador');
 
-  // Logistics Overrides (UI local, no necesita persistencia entre bloques)
-  const [logisticsOverrides, setLogisticsOverrides] = useState({ enabled: false });
+  // Logistics Overrides & Indirect Switch (Sincronizado con EPCDashboard)
+  const [localLogisticsOverrides, setLocalLogisticsOverrides] = useState({ enabled: false });
+  const activeLogisticsOverrides = logisticsOverrides || localLogisticsOverrides;
+  const updateLogisticsOverrides = setLogisticsOverrides || setLocalLogisticsOverrides;
+
+  const [localAplicarIndirectos, setLocalAplicarIndirectos] = useState(true);
+  const activeAplicarIndirectos = aplicarGastosIndirectos !== undefined ? aplicarGastosIndirectos : localAplicarIndirectos;
+  const updateAplicarIndirectos = setAplicarGastosIndirectos || setLocalAplicarIndirectos;
+
   const [showLogisticsModal, setShowLogisticsModal] = useState(false);
 
   // Catálogo Maestro desde Firestore
@@ -349,7 +360,8 @@ function Bloque2_SSTT({
     Gastos_Imprevistos: gastosImprevistos,
     Margen_Imprevistos_Porcentaje: margenImprevistosPorcentaje,
     condicionTrabajo: condicionTrabajo,
-    logisticsOverrides: logisticsOverrides
+    aplicarGastosIndirectos: activeAplicarIndirectos,
+    logisticsOverrides: activeLogisticsOverrides
   };
 
   const resultadosCalculados = useMemo(() => {
@@ -358,7 +370,7 @@ function Bloque2_SSTT({
       equiposCotizados: structuredClone(cart),
       alquileres: structuredClone(alquileres)
     });
-  }, [nombreCliente, nombreProyecto, distanciaKm, diasPermitidosCorte, gastosImprevistos, margenImprevistosPorcentaje, condicionTrabajo, logisticsOverrides, cart, alquileres]);
+  }, [nombreCliente, nombreProyecto, distanciaKm, diasPermitidosCorte, gastosImprevistos, margenImprevistosPorcentaje, condicionTrabajo, activeAplicarIndirectos, activeLogisticsOverrides, cart, alquileres]);
 
   const totalCostoTecnico = resultadosCalculados?.Precio_Venta_Final || 0;
 
@@ -1101,52 +1113,141 @@ function Bloque2_SSTT({
           </div>
 
           {/* 3. Operaciones y Riesgos (Centro de Gastos Indirectos) */}
-          <div className="odoo-card">
-            <h2 style={{ marginBottom: '15px' }}><ShieldAlert size={20} /> Centro de Control de Gastos Indirectos</h2>
+          <div className="odoo-card" style={{
+            borderLeft: activeAplicarIndirectos ? '4px solid var(--accent, #3b82f6)' : '4px solid #94a3b8',
+            transition: 'all 0.3s ease'
+          }}>
+            {/* Cabecera con Switch On/Off */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ShieldAlert size={22} color={activeAplicarIndirectos ? '#2563eb' : '#64748b'} />
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '1.15rem', color: activeAplicarIndirectos ? 'var(--text-primary)' : '#64748b' }}>
+                    Centro de Control de Gastos Indirectos
+                  </h2>
+                  <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                    {activeAplicarIndirectos ? 'Logística, viáticos, hospedaje e imprevistos calculados' : 'Desactivado (0 Gs / 0 USD para cotizaciones de terceros)'}
+                  </span>
+                </div>
+              </div>
+
+              {/* SWITCH / TOGGLE */}
+              <div style={{
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '10px', 
+                background: activeAplicarIndirectos ? '#eff6ff' : '#f1f5f9', 
+                padding: '6px 14px', 
+                borderRadius: '20px', 
+                border: activeAplicarIndirectos ? '1px solid #bfdbfe' : '1px solid #cbd5e1',
+                boxShadow: activeAplicarIndirectos ? '0 2px 6px rgba(37,99,235,0.1)' : 'none'
+              }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: activeAplicarIndirectos ? '#1e40af' : '#64748b' }}>
+                  {activeAplicarIndirectos ? '🟢 Gastos Indirectos Activos' : '⚪ Centro en Cero (Terceros)'}
+                </span>
+                <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', margin: 0, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={activeAplicarIndirectos}
+                    onChange={(e) => {
+                      updateAplicarIndirectos(e.target.checked);
+                      setIsDirty(true);
+                    }}
+                    style={{ opacity: 0, width: 0, height: 0 }}
+                  />
+                  <span style={{
+                    position: 'absolute',
+                    cursor: 'pointer',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: activeAplicarIndirectos ? '#2563eb' : '#94a3b8',
+                    transition: '0.3s',
+                    borderRadius: '24px'
+                  }}>
+                    <span style={{
+                      position: 'absolute',
+                      content: '""',
+                      height: '18px',
+                      width: '18px',
+                      left: activeAplicarIndirectos ? '22px' : '3px',
+                      bottom: '3px',
+                      backgroundColor: 'white',
+                      transition: '0.3s',
+                      borderRadius: '50%',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                    }}></span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {/* Banner explicativo cuando está en cero */}
+            {!activeAplicarIndirectos && (
+              <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '1.3rem' }}>💡</span>
+                <div style={{ fontSize: '0.85rem', color: '#475569', lineHeight: '1.4' }}>
+                  <strong>Modo Servicios Tercerizados / Sin Despliegue Propio:</strong> La logística, viáticos, hospedajes, peajes e imprevistos están anulados en <strong>0 Gs.</strong> para que el precio de venta refleje exactamente la cotización directa de terceros sin recargos operativos internos.
+                </div>
+              </div>
+            )}
             
-            {/* Parámetros Básicos */}
-            <div className="config-grid" style={{ marginBottom: '20px' }}>
-              <div className="form-group">
-                <label>Distancia ida/vuelta (km)</label>
-                <input type="number" min="0" value={distanciaKm} onChange={(e) => { setDistanciaKm(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
+            {/* Contenido condicionado con opacidad visual */}
+            <div style={{ opacity: activeAplicarIndirectos ? 1 : 0.45, pointerEvents: activeAplicarIndirectos ? 'auto' : 'none', transition: 'opacity 0.2s' }}>
+              {/* Parámetros Básicos */}
+              <div className="config-grid" style={{ marginBottom: '20px' }}>
+                <div className="form-group">
+                  <label>Distancia ida/vuelta (km)</label>
+                  <input type="number" min="0" value={distanciaKm} onChange={(e) => { setDistanciaKm(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
+                </div>
+                <div className="form-group">
+                  <label>Días Permitidos (Corte)</label>
+                  <input type="number" min="1" value={diasPermitidosCorte} onChange={(e) => { setDiasPermitidosCorte(parseInt(e.target.value) || 1); setIsDirty(true); }} />
+                </div>
               </div>
-              <div className="form-group">
-                <label>Días Permitidos (Corte)</label>
-                <input type="number" min="1" value={diasPermitidosCorte} onChange={(e) => { setDiasPermitidosCorte(parseInt(e.target.value) || 1); setIsDirty(true); }} />
+
+              <div className="form-group" style={{ marginBottom: '20px' }}>
+                <label>Condición de Trabajo / Ventana de Corte (Multiplicador de Riesgo)</label>
+                <select 
+                  value={condicionTrabajo} 
+                  onChange={(e) => { setCondicionTrabajo(parseFloat(e.target.value)); setIsDirty(true); }}
+                  style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontWeight: 'bold' }}
+                >
+                  <option value={1.0}>Normal / Obra Nueva (1.0x)</option>
+                  <option value={1.2}>Ventana Nocturna Estándar (1.2x)</option>
+                  <option value={1.5}>Ventana Crítica / Tiempo Restringido (1.5x)</option>
+                  <option value={2.0}>Instalación Energizada (2.0x)</option>
+                </select>
+              </div>
+
+              {/* Modal Logistico Button */}
+              <div style={{ marginBottom: '20px', padding: '15px', background: '#f1f5f9', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <strong style={{ display: 'block', color: 'var(--text-primary)' }}>Auditoría Logística y RRHH</strong>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Ajusta viáticos, hospedaje y movilidad</span>
+                </div>
+                <button 
+                  className="primary-btn" 
+                  onClick={() => setShowLogisticsModal(true)} 
+                  style={{ width: 'auto', padding: '8px 16px', background: activeLogisticsOverrides?.enabled ? '#10b981' : 'var(--accent)' }}
+                >
+                  <Settings size={16} /> Configuración {activeLogisticsOverrides?.enabled ? '(Manual)' : '(Auto)'}
+                </button>
+              </div>
+
+              {/* Imprevistos */}
+              <div className="config-grid" style={{ marginBottom: '20px' }}>
+                <div className="form-group">
+                  <label>Gastos Imprevistos Fijos (Gs.)</label>
+                  <input type="number" min="0" value={gastosImprevistos} onChange={(e) => { setGastosImprevistos(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
+                </div>
+                <div className="form-group">
+                  <label>Margen Adicional Imprevistos (%)</label>
+                  <input type="number" min="0" value={margenImprevistosPorcentaje} onChange={(e) => { setMargenImprevistosPorcentaje(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
+                </div>
               </div>
             </div>
 
-            <div className="form-group" style={{ marginBottom: '20px' }}>
-              <label>Condición de Trabajo / Ventana de Corte (Multiplicador de Riesgo)</label>
-              <select 
-                value={condicionTrabajo} 
-                onChange={(e) => { setCondicionTrabajo(parseFloat(e.target.value)); setIsDirty(true); }}
-                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontWeight: 'bold' }}
-              >
-                <option value={1.0}>Normal / Obra Nueva (1.0x)</option>
-                <option value={1.2}>Ventana Nocturna Estándar (1.2x)</option>
-                <option value={1.5}>Ventana Crítica / Tiempo Restringido (1.5x)</option>
-                <option value={2.0}>Instalación Energizada (2.0x)</option>
-              </select>
-            </div>
-
-            {/* Modal Logistico Button */}
-            <div style={{ marginBottom: '20px', padding: '15px', background: '#f1f5f9', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <strong style={{ display: 'block', color: 'var(--text-primary)' }}>Auditoría Logística y RRHH</strong>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Ajusta viáticos, hospedaje y movilidad</span>
-              </div>
-              <button 
-                className="primary-btn" 
-                onClick={() => setShowLogisticsModal(true)} 
-                style={{ width: 'auto', padding: '8px 16px', background: logisticsOverrides?.enabled ? '#10b981' : 'var(--accent)' }}
-              >
-                <Settings size={16} /> Configuración {logisticsOverrides?.enabled ? '(Manual)' : '(Auto)'}
-              </button>
-            </div>
-
-            {/* Alquileres Especiales */}
-            <div style={{ marginBottom: '20px' }}>
+            {/* Alquileres Especiales (Siempre accesibles como partida independiente) */}
+            <div style={{ marginTop: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '15px' }}>
               <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', color: 'var(--text-primary)' }}>Servicios de Apoyo y Alquileres (Grúas, Fletes)</label>
               {alquileres.map((alq) => (
                 <div key={alq.id} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
@@ -1158,18 +1259,6 @@ function Bloque2_SSTT({
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
                 <button className="primary-btn" onClick={addAlquiler} style={{ width: 'auto', padding: '6px 12px', background: '#64748b' }}><Plus size={16} /> Agregar</button>
                 <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>Total: {formatGs(alquileres.reduce((sum, a) => sum + a.costo, 0))}</span>
-              </div>
-            </div>
-
-            {/* Imprevistos */}
-            <div className="config-grid">
-              <div className="form-group">
-                <label>Gastos Imprevistos Fijos (Gs.)</label>
-                <input type="number" min="0" value={gastosImprevistos} onChange={(e) => { setGastosImprevistos(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
-              </div>
-              <div className="form-group">
-                <label>Margen Adicional Imprevistos (%)</label>
-                <input type="number" min="0" value={margenImprevistosPorcentaje} onChange={(e) => { setMargenImprevistosPorcentaje(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
               </div>
             </div>
 
@@ -1203,8 +1292,8 @@ function Bloque2_SSTT({
         isOpen={showLogisticsModal} 
         onClose={() => setShowLogisticsModal(false)} 
         resultados={resultadosCalculados}
-        currentOverrides={logisticsOverrides}
-        onSave={(newOverrides) => { setLogisticsOverrides(newOverrides); setIsDirty(true); }}
+        currentOverrides={activeLogisticsOverrides}
+        onSave={(newOverrides) => { updateLogisticsOverrides(newOverrides); setIsDirty(true); }}
       />
 
       {showUnsavedChangesModal && (

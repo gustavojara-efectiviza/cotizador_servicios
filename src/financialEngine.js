@@ -27,12 +27,13 @@ export const Variables_Globales = {
 };
 
 export const calcularCotizacionActiva = (cotizacion) => {
+  const aplicarGastosIndirectos = cotizacion.aplicarGastosIndirectos !== false;
   const Dias_Permitidos_Corte = Math.max(1, Number(cotizacion.Dias_Permitidos_Corte) || 1);
   const Distancia_Ida_Vuelta_km = Number(cotizacion.Distancia_Ida_Vuelta_km) || 0;
   
   const condicionTrabajo = Number(cotizacion.condicionTrabajo) || 1.0;
-  const Gastos_Imprevistos = (Number(cotizacion.Gastos_Imprevistos) || 0) * condicionTrabajo;
-  const Margen_Imprevistos_Porcentaje = Number(cotizacion.Margen_Imprevistos_Porcentaje) || 0;
+  const Gastos_Imprevistos = aplicarGastosIndirectos ? ((Number(cotizacion.Gastos_Imprevistos) || 0) * condicionTrabajo) : 0;
+  const Margen_Imprevistos_Porcentaje = aplicarGastosIndirectos ? (Number(cotizacion.Margen_Imprevistos_Porcentaje) || 0) : 0;
   const Precio_Mercado_Aplicado = Number(cotizacion.Precio_Mercado_Aplicado) || 0;
 
   const equiposCotizados = cotizacion.equiposCotizados || [];
@@ -173,50 +174,64 @@ export const calcularCotizacionActiva = (cotizacion) => {
   const Costo_Mano_Obra_Total = Costo_MO_Especialistas_Total + Costo_MO_Auxiliares_Total + Costo_MO_Externos_Total;
 
   // 2. LOGÍSTICA GLOBAL (Cálculo de Despliegue de Cuadrilla Propia)
-  const Personal_Calculado = Math.ceil(Total_Dias_Esfuerzo / Dias_Permitidos_Corte);
-  const Personal_Simultaneo = Math.max(2, Personal_Calculado);
-  const Dias_Reales_Obra = Math.max(1, Math.ceil(Total_Dias_Esfuerzo / Personal_Simultaneo));
-  
+  let Personal_Calculado = 0;
+  let Personal_Simultaneo = 0;
+  let Dias_Reales_Obra = 0;
   let Dias_Viatico = 0;
   let Noches_Hotel = 0;
-  if (Distancia_Ida_Vuelta_km > 200) {
-    Dias_Viatico = Math.max(2, Dias_Reales_Obra);
-    Noches_Hotel = Math.max(1, Dias_Reales_Obra - 1);
-  } else {
-    Dias_Viatico = Dias_Reales_Obra;
-    Noches_Hotel = 0;
-  }
-  
-  const isLogisticsOverridden = cotizacion.logisticsOverrides?.enabled;
-  const lO = cotizacion.logisticsOverrides || {};
-  
-  const final_viaticos_qty = isLogisticsOverridden ? (lO.viaticos_qty ?? Personal_Simultaneo) : Personal_Simultaneo;
-  const final_viaticos_dias = isLogisticsOverridden ? (lO.viaticos_dias ?? Dias_Viatico) : Dias_Viatico;
-  const final_viaticos_rate = isLogisticsOverridden ? (lO.viaticos_rate ?? TARIFA_VIATICO_DIA) : TARIFA_VIATICO_DIA;
-  const Costo_Viaticos_Total = final_viaticos_qty * final_viaticos_dias * final_viaticos_rate;
-
-  const final_hospedaje_qty = isLogisticsOverridden ? (lO.hospedaje_qty ?? Personal_Simultaneo) : Personal_Simultaneo;
-  const final_hospedaje_noches = isLogisticsOverridden ? (lO.hospedaje_noches ?? Noches_Hotel) : Noches_Hotel;
-  const final_hospedaje_rate = isLogisticsOverridden ? (lO.hospedaje_rate ?? TARIFA_HOSPEDAJE_DIA) : TARIFA_HOSPEDAJE_DIA;
-  const Costo_Hospedaje_Total = final_hospedaje_qty * final_hospedaje_noches * final_hospedaje_rate;
-
-  const Consumo_Litros_100km = 14;
-  const Precio_Litro_Combustible = 10500;
+  let Costo_Viaticos_Total = 0;
+  let Costo_Hospedaje_Total = 0;
   let Peajes_Cantidad = 0;
-  if (Distancia_Ida_Vuelta_km > 0) {
-    if (Distancia_Ida_Vuelta_km < 200) Peajes_Cantidad = 2;
-    else if (Distancia_Ida_Vuelta_km < 400) Peajes_Cantidad = 4;
-    else Peajes_Cantidad = 8;
+  let Costo_Peajes_Viaje = 0;
+  let Costo_Viaje_Base = 0;
+  let Cantidad_Vehiculos = 0;
+  let Costo_Movilidad_Total = 0;
+  let Logistica_Global_Total = 0;
+
+  if (aplicarGastosIndirectos) {
+    Personal_Calculado = Math.ceil(Total_Dias_Esfuerzo / Dias_Permitidos_Corte);
+    Personal_Simultaneo = Math.max(2, Personal_Calculado);
+    Dias_Reales_Obra = Math.max(1, Math.ceil(Total_Dias_Esfuerzo / Personal_Simultaneo));
+    
+    if (Distancia_Ida_Vuelta_km > 200) {
+      Dias_Viatico = Math.max(2, Dias_Reales_Obra);
+      Noches_Hotel = Math.max(1, Dias_Reales_Obra - 1);
+    } else {
+      Dias_Viatico = Dias_Reales_Obra;
+      Noches_Hotel = 0;
+    }
+    
+    const isLogisticsOverridden = cotizacion.logisticsOverrides?.enabled;
+    const lO = cotizacion.logisticsOverrides || {};
+    
+    const final_viaticos_qty = isLogisticsOverridden ? (lO.viaticos_qty ?? Personal_Simultaneo) : Personal_Simultaneo;
+    const final_viaticos_dias = isLogisticsOverridden ? (lO.viaticos_dias ?? Dias_Viatico) : Dias_Viatico;
+    const final_viaticos_rate = isLogisticsOverridden ? (lO.viaticos_rate ?? TARIFA_VIATICO_DIA) : TARIFA_VIATICO_DIA;
+    Costo_Viaticos_Total = final_viaticos_qty * final_viaticos_dias * final_viaticos_rate;
+
+    const final_hospedaje_qty = isLogisticsOverridden ? (lO.hospedaje_qty ?? Personal_Simultaneo) : Personal_Simultaneo;
+    const final_hospedaje_noches = isLogisticsOverridden ? (lO.hospedaje_noches ?? Noches_Hotel) : Noches_Hotel;
+    const final_hospedaje_rate = isLogisticsOverridden ? (lO.hospedaje_rate ?? TARIFA_HOSPEDAJE_DIA) : TARIFA_HOSPEDAJE_DIA;
+    Costo_Hospedaje_Total = final_hospedaje_qty * final_hospedaje_noches * final_hospedaje_rate;
+
+    const Consumo_Litros_100km = 14;
+    const Precio_Litro_Combustible = 10500;
+    if (Distancia_Ida_Vuelta_km > 0) {
+      if (Distancia_Ida_Vuelta_km < 200) Peajes_Cantidad = 2;
+      else if (Distancia_Ida_Vuelta_km < 400) Peajes_Cantidad = 4;
+      else Peajes_Cantidad = 8;
+    }
+    Costo_Peajes_Viaje = Peajes_Cantidad * 18000;
+    Costo_Viaje_Base = ((Distancia_Ida_Vuelta_km / 100) * Consumo_Litros_100km * Precio_Litro_Combustible) + Costo_Peajes_Viaje;
+
+    Cantidad_Vehiculos = Math.ceil(Personal_Simultaneo / 4);
+    const final_vehiculos_qty = isLogisticsOverridden ? (lO.vehiculos_qty ?? Cantidad_Vehiculos) : Cantidad_Vehiculos;
+    const final_vehiculos_rate = isLogisticsOverridden ? (lO.vehiculos_rate ?? Costo_Viaje_Base) : Costo_Viaje_Base;
+    Costo_Movilidad_Total = final_vehiculos_qty * final_vehiculos_rate;
+
+    Logistica_Global_Total = Costo_Viaticos_Total + Costo_Hospedaje_Total + Costo_Movilidad_Total;
   }
-  const Costo_Peajes_Viaje = Peajes_Cantidad * 18000;
-  const Costo_Viaje_Base = ((Distancia_Ida_Vuelta_km / 100) * Consumo_Litros_100km * Precio_Litro_Combustible) + Costo_Peajes_Viaje;
 
-  const Cantidad_Vehiculos = Math.ceil(Personal_Simultaneo / 4);
-  const final_vehiculos_qty = isLogisticsOverridden ? (lO.vehiculos_qty ?? Cantidad_Vehiculos) : Cantidad_Vehiculos;
-  const final_vehiculos_rate = isLogisticsOverridden ? (lO.vehiculos_rate ?? Costo_Viaje_Base) : Costo_Viaje_Base;
-  const Costo_Movilidad_Total = final_vehiculos_qty * final_vehiculos_rate;
-
-  const Logistica_Global_Total = Costo_Viaticos_Total + Costo_Hospedaje_Total + Costo_Movilidad_Total;
   const Total_Alquileres = alquileres.reduce((sum, alq) => sum + (Number(alq.costo) || 0), 0);
 
   // Costo Directo Total Puro
@@ -359,6 +374,7 @@ export const calcularCotizacionActiva = (cotizacion) => {
   const Precio_Venta_Logistica = Logistica_Global_Total + Ganancia_Logistica;
 
   return {
+    aplicarGastosIndirectos,
     Dias_Permitidos_Corte,
     Total_Dias_Esfuerzo,
     Personal_Simultaneo,
