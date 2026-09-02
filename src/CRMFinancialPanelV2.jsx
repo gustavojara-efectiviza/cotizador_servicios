@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 
 export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCotizados = [], alquileres = [] }) {
   const [showAuditoria, setShowAuditoria] = useState(false);
+  const [copiedToast, setCopiedToast] = useState(false);
 
   const formatGs = (num) => new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(num);
 
@@ -89,6 +90,21 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
       ]);
     }
 
+    // SSMA y Consumibles
+    const costoSSMA = resultados.Costo_SSMA_Consumibles || 0;
+    const utilidadSSMA = resultados.Ganancia_SSMA_Consumibles || 0;
+    const precioSSMA = resultados.Precio_SSMA_Consumibles || (costoSSMA + utilidadSSMA);
+    const margenSSMA = precioSSMA > 0 ? (utilidadSSMA / precioSSMA) * 100 : 0;
+    if (costoSSMA > 0) {
+      rowsResumen.push([
+        "Provisión de Seguridad Industrial (SSMA) y Consumibles",
+        formatNumber(costoSSMA),
+        formatPercent(margenSSMA),
+        formatNumber(utilidadSSMA),
+        formatNumber(precioSSMA)
+      ]);
+    }
+
     // Gastos Administrativos
     const gastosAdmin = resultados.Gastos_Administrativos || 0;
     rowsResumen.push([
@@ -100,7 +116,7 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
     ]);
 
     // Totales
-    const sumTotal = precioEquipos + precioLogistica + precioAlquileres + precioImprevistos + gastosAdmin;
+    const sumTotal = precioEquipos + precioLogistica + precioAlquileres + precioImprevistos + (costoSSMA > 0 ? precioSSMA : 0) + gastosAdmin;
     rowsResumen.push([]);
     rowsResumen.push(["", "", "", "SUBTOTAL", formatNumber(sumTotal)]);
     rowsResumen.push(["", "", "", "IVA (10%)", formatNumber(sumTotal * 0.1)]);
@@ -265,7 +281,8 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(generateERPMemory());
-    alert("✅ Copiado al portapapeles (Formato ERP).");
+    setCopiedToast(true);
+    setTimeout(() => setCopiedToast(false), 2000);
   };
 
   return (
@@ -314,6 +331,12 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
                 <span>{formatGs(resultados.Total_Alquileres)}</span>
               </div>
             )}
+            {resultados.Costo_SSMA_Consumibles > 0 && (
+              <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.9rem', color: '#059669' }}>
+                <span>Provisión SSMA y Consumibles ({resultados.porcentajeSSMAProvision || 5}%):</span>
+                <span style={{ fontWeight: 'bold' }}>{formatGs(resultados.Costo_SSMA_Consumibles)}</span>
+              </div>
+            )}
             
             <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed var(--border-color)', fontWeight: 'bold', color: 'var(--text-primary)' }}>
               <span>Total Costos Directos:</span>
@@ -328,22 +351,32 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
               <span>Gastos Administrativos (3%):</span>
               <span style={{ color: 'var(--text-primary)' }}>{formatGs(resultados.Gastos_Administrativos)}</span>
             </div>
+            {resultados.Ganancia_Tecnologia_Total > 0 && (
+              <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                <span>Ganancia Tecnología ({(Variables_Globales.MARGEN_TECNOLOGIA * 100).toFixed(0)}% Eq):</span>
+                <span style={{ color: '#10b981', fontWeight: 'bold' }}>+{formatGs(resultados.Ganancia_Tecnologia_Total)}</span>
+              </div>
+            )}
             <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              <span>Ganancia Tecnología ({(Variables_Globales.MARGEN_TECNOLOGIA * 100).toFixed(0)}% Eq):</span>
-              <span style={{ color: '#10b981', fontWeight: 'bold' }}>+{formatGs(resultados.Ganancia_Tecnologia_Total)}</span>
-            </div>
-            <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              <span>Ganancia Ingeniería (100% MO):</span>
+              <span>Ganancia Mano de Obra (Ingeniería):</span>
               <span style={{ color: '#10b981', fontWeight: 'bold' }}>+{formatGs(resultados.Ganancia_Ingenieria)}</span>
             </div>
-            <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              <span>Ganancia Logística (30%):</span>
-              <span style={{ color: '#10b981', fontWeight: 'bold' }}>+{formatGs(resultados.Ganancia_Logistica)}</span>
-            </div>
+            {resultados.Ganancia_Logistica > 0 && (
+              <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                <span>Ganancia Logística (30%):</span>
+                <span style={{ color: '#10b981', fontWeight: 'bold' }}>+{formatGs(resultados.Ganancia_Logistica)}</span>
+              </div>
+            )}
             {resultados.Ganancia_Imprevistos > 0 && (
               <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
                 <span>Ganancia Imprevistos:</span>
                 <span style={{ color: '#10b981', fontWeight: 'bold' }}>+{formatGs(resultados.Ganancia_Imprevistos)}</span>
+              </div>
+            )}
+            {resultados.Costo_SSMA_Consumibles > 0 && (
+              <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                <span>Ganancia SSMA y Consumibles:</span>
+                <span style={{ color: '#10b981', fontWeight: 'bold' }}>+{formatGs(resultados.Ganancia_SSMA_Consumibles || 0)}</span>
               </div>
             )}
             {resultados.Ganancia_Tercerizados_Nuevos > 0 && (
@@ -402,12 +435,19 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
               <span style={{ color: 'var(--text-secondary)' }}>{showAuditoria ? '▲' : '▼'}</span>
             </div>
             
-            <button 
-              onClick={copyToClipboard}
-              style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: 'var(--text-primary)', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
-            >
-              <Copy size={14} /> Copiar a CRM
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {copiedToast && (
+                <span style={{ fontSize: '0.8rem', color: '#059669', fontWeight: 600, animation: 'fadeIn 0.2s ease' }}>
+                  ✅ Copiado!
+                </span>
+              )}
+              <button 
+                onClick={copyToClipboard}
+                style={{ background: 'white', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: 'var(--text-primary)', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+              >
+                <Copy size={14} /> Copiar a CRM
+              </button>
+            </div>
           </div>
           
           {showAuditoria && (

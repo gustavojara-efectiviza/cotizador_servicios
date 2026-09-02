@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Settings, Calculator, FileText, Plus, Trash2, Zap, Layout, Database as DatabaseIcon, Edit2, ShieldAlert, PackagePlus, Users, DollarSign, Calendar, Truck } from 'lucide-react';
+import { Settings, Calculator, FileText, Plus, Trash2, Zap, Layout, Database as DatabaseIcon, Edit2, ShieldAlert, ShieldCheck, PackagePlus, Users, DollarSign, Calendar, Truck, Sparkles, Search, Layers, ListPlus, Check } from 'lucide-react';
 import UnifilarConfigurator from './UnifilarConfigurator';
 import CRMFinancialPanelV2 from './CRMFinancialPanelV2';
 import { fetchEquiposMaestros, getTensionsFromData, getEquipmentsByTensionFromData, addEquipoMaestro } from './services/dbService';
 import { calcularCotizacionActiva, Maestro_Precios_Mercado, COSTO_ESPECIALISTA_DIA, COSTO_AUXILIAR_DIA, COSTO_EXTERNO_DIA, TARIFA_EQUIPOS_HORA } from './financialEngine';
+import { CATALOGOS_SERVICIOS_FRECUENTES, buildMacroPaqueteTrafo, buildMacroPCPCompleto, buildItemFromCatalogEntry } from './catalogoMacros';
 import LogisticsModal from './LogisticsModal';
 import './index.css';
 
@@ -28,6 +29,10 @@ function Bloque2_SSTT({
   setCondicionTrabajo,
   aplicarGastosIndirectos = true,
   setAplicarGastosIndirectos,
+  aplicarSSMAProvision = true,
+  setAplicarSSMAProvision,
+  porcentajeSSMAProvision = 5,
+  setPorcentajeSSMAProvision,
   logisticsOverrides = { enabled: false },
   setLogisticsOverrides,
   // CALLBACKS AL PADRE
@@ -46,6 +51,16 @@ function Bloque2_SSTT({
   const [cantidad, setCantidad] = useState(1);
   const [activeTab, setActiveTab] = useState('cotizador');
 
+  // Estado para Buscador Capa 2 (Catálogo a la Carta con datalist)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchCantidad, setSearchCantidad] = useState(1);
+  const [toastMsg, setToastMsg] = useState(null);
+
+  const showFeedbackToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
+
   // Logistics Overrides & Indirect Switch (Sincronizado con EPCDashboard)
   const [localLogisticsOverrides, setLocalLogisticsOverrides] = useState({ enabled: false });
   const activeLogisticsOverrides = logisticsOverrides || localLogisticsOverrides;
@@ -54,6 +69,11 @@ function Bloque2_SSTT({
   const [localAplicarIndirectos, setLocalAplicarIndirectos] = useState(true);
   const activeAplicarIndirectos = aplicarGastosIndirectos !== undefined ? aplicarGastosIndirectos : localAplicarIndirectos;
   const updateAplicarIndirectos = setAplicarGastosIndirectos || setLocalAplicarIndirectos;
+
+  // Toggle SSMA y Consumibles (5% Pareto)
+  const [localAplicarSSMA, setLocalAplicarSSMA] = useState(true);
+  const activeAplicarSSMA = aplicarSSMAProvision !== undefined ? aplicarSSMAProvision : localAplicarSSMA;
+  const updateAplicarSSMA = setAplicarSSMAProvision || setLocalAplicarSSMA;
 
   const [showLogisticsModal, setShowLogisticsModal] = useState(false);
 
@@ -143,6 +163,204 @@ function Bloque2_SSTT({
     );
   };
 
+  // ============================================================================
+  // CAPA 1: INGRESO MANUAL LIBRE (+ Ítem Manual / Partida Global)
+  // ============================================================================
+  const handleAddManualItem = () => {
+    const newItem = {
+      id: crypto.randomUUID(),
+      tension: 'N/A',
+      equipo: 'Nueva Partida Manual / Servicio',
+      cantidad: 1,
+      baseData: {
+        equipo: 'Nueva Partida Manual / Servicio',
+        tension: 'N/A',
+        horas_equipo: 0,
+        horas_servicio: 0,
+        interno: 0,
+        ayudante: 0,
+        externo: 0,
+        costo_total_base: 0
+      },
+      overrides: {
+        is_tercerizado: true,
+        modo_subcontrato: 'fijo',
+        costo_total_base: 0,
+        margen_tercerizado: 30
+      }
+    };
+    setCart(prev => [...prev, newItem]);
+    setIsDirty(true);
+    showFeedbackToast('➕ Ítem manual agregado al carrito.');
+  };
+
+  // Edición Inline directa de descripción y costo
+  const updateItemName = (id, newName) => {
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        return {
+          ...item,
+          equipo: newName,
+          baseData: {
+            ...item.baseData,
+            equipo: newName
+          }
+        };
+      }
+      return item;
+    }));
+    setIsDirty(true);
+  };
+
+  const updateItemCosto = (id, newCosto) => {
+    const val = Math.max(0, parseFloat(newCosto) || 0);
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        return {
+          ...item,
+          needsPriceReview: false, // P8: Limpiar el flag de advertencia al editar el costo
+          baseData: {
+            ...item.baseData,
+            costo_total_base: val
+          },
+          overrides: {
+            ...(item.overrides || {}),
+            costo_total_base: val,
+            is_tercerizado: item.overrides?.is_tercerizado ?? true
+          }
+        };
+      }
+      return item;
+    }));
+    setIsDirty(true);
+  };
+
+  // ============================================================================
+  // CAPA 2: CATÁLOGO A LA CARTA (<datalist> y buscador individual)
+  // ============================================================================
+  const catalogoSugerencias = useMemo(() => {
+    // Servicios frecuentes provienen del módulo centralizado catalogoMacros.js
+    // Para actualizar precios, editar SOLO ese archivo.
+    const serviciosFrecuentes = CATALOGOS_SERVICIOS_FRECUENTES;
+
+    const dbItems = (maestroData || []).map(item => ({
+      label: `${item.equipo} (${item.tension || 'N/A'})`,
+      equipo: item.equipo,
+      tension: item.tension,
+      rawItem: item
+    }));
+
+    return { serviciosFrecuentes, dbItems };
+  }, [maestroData]);
+
+  const handleAddFromDatalist = () => {
+    const query = searchQuery.trim();
+    if (!query) return;
+
+    const qty = Math.max(1, parseInt(searchCantidad) || 1);
+
+    const normalizeString = (str) => {
+      if (!str) return '';
+      return String(str).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    };
+
+    const queryNorm = normalizeString(query);
+
+    // 1. Buscar en servicios frecuentes
+    const foundFreq = catalogoSugerencias.serviciosFrecuentes.find(
+      s => normalizeString(s.label) === queryNorm || normalizeString(s.label).includes(queryNorm)
+    );
+
+    // 2. Buscar en catálogo de base de datos
+    const foundDb = (maestroData || []).find(e => 
+      normalizeString(e.equipo) === queryNorm || 
+      normalizeString(`${e.equipo} (${e.tension})`) === queryNorm ||
+      normalizeString(e.equipo).includes(queryNorm)
+    );
+
+    let newItem;
+    if (foundFreq) {
+      newItem = {
+        id: crypto.randomUUID(),
+        tension: foundFreq.tension || 'N/A',
+        equipo: foundFreq.label,
+        cantidad: qty,
+        baseData: {
+          equipo: foundFreq.label,
+          tension: foundFreq.tension || 'N/A',
+          horas_equipo: 0,
+          horas_servicio: 0,
+          interno: 0,
+          ayudante: 0,
+          externo: 0,
+          costo_total_base: foundFreq.costo_total_base || 0
+        },
+        overrides: {
+          is_tercerizado: true,
+          modo_subcontrato: 'fijo',
+          costo_total_base: foundFreq.costo_total_base || 0,
+          margen_tercerizado: 30
+        }
+      };
+    } else if (foundDb) {
+      newItem = {
+        id: crypto.randomUUID(),
+        tension: foundDb.tension || '500 kV',
+        equipo: foundDb.equipo,
+        cantidad: qty,
+        baseData: structuredClone(foundDb)
+      };
+    } else {
+      // Texto libre en buscador
+      newItem = {
+        id: crypto.randomUUID(),
+        tension: 'N/A',
+        equipo: query,
+        cantidad: qty,
+        baseData: {
+          equipo: query,
+          tension: 'N/A',
+          horas_equipo: 0,
+          horas_servicio: 0,
+          interno: 0,
+          ayudante: 0,
+          externo: 0,
+          costo_total_base: 0
+        },
+        overrides: {
+          is_tercerizado: true,
+          modo_subcontrato: 'fijo',
+          costo_total_base: 0,
+          margen_tercerizado: 30
+        }
+      };
+    }
+
+    setCart(prev => [...prev, newItem]);
+    setSearchQuery('');
+    setSearchCantidad(1);
+    setIsDirty(true);
+    showFeedbackToast(`✅ ${qty}x ${newItem.equipo} agregado.`);
+  };
+
+  // ============================================================================
+  // CAPA 3: BOTONES DE MACRO / PLANTILLAS FRONT-END
+  // Los precios de estos templates se gestionan en catalogoMacros.js
+  // ============================================================================
+  const handleInjectMacroPaqueteTrafo = () => {
+    const itemsMacro = buildMacroPaqueteTrafo(30);
+    setCart(prev => [...prev, ...itemsMacro]);
+    setIsDirty(true);
+    showFeedbackToast(`⚡ Paquete Mantenimiento Trafo inyectado (${itemsMacro.length} ítems).`);
+  };
+
+  const handleInjectMacroPCPCompleto = () => {
+    const itemsMacro = buildMacroPCPCompleto(30);
+    setCart(prev => [...prev, ...itemsMacro]);
+    setIsDirty(true);
+    showFeedbackToast(`⚡ Mantenimiento Integral PCP (${itemsMacro.length} ítems) inyectado.`);
+  };
+
   const handleAdd = () => {
     const equipData = availableEquipments.find(e => e.equipo === equipo);
     if (!equipData) return;
@@ -189,25 +407,40 @@ function Bloque2_SSTT({
       equipData = availables.find(e => e.equipo.toLowerCase().includes(mappedName.toLowerCase()) || mappedName.toLowerCase().includes(e.equipo.toLowerCase()));
     }
     
-    // Si aún no encuentra, usar un genérico para no romper el flujo
+    // P8: Fallback explícito — costo en 0 y flag de revisión para que no pase desapercibido
+    let needsPriceReview = false;
     if (!equipData) {
+      needsPriceReview = true;
       equipData = {
         tension: item.tension,
         equipo: item.equipo,
         horas_equipo: 4,
-        interno: 1, ayudante: 1, costo_total_base: 1000000
+        horas_servicio: 4,
+        interno: 1,
+        ayudante: 1,
+        externo: 0,
+        costo_total_base: 0  // 0 en lugar de 1.000.000 — fuerza al operador a revisar
       };
     }
     
-    setCart(prev => [...prev, {
+    const newCartItem = {
       id: crypto.randomUUID(),
       tension: item.tension,
       equipo: item.equipo, // Keep the unifilar name for UI
       cantidad: item.cantidad,
-      baseData: structuredClone(equipData)
-    }]);
+      baseData: structuredClone(equipData),
+      ...(needsPriceReview && { needsPriceReview: true }) // Flag para marcado visual
+    };
+
+    setCart(prev => [...prev, newCartItem]);
     setIsDirty(true);
-    alert(`✅ ${item.cantidad}x ${item.equipo} (${item.tension}) agregado al carrito.`);
+
+    if (needsPriceReview) {
+      // Toast de advertencia con instrucción clara — no bloquea el flujo
+      showFeedbackToast(`⚠️ ${item.equipo} no está en el catálogo. Costo en Gs. 0 — revisá el precio en el modal de edición antes de cotizar.`);
+    } else {
+      showFeedbackToast(`✅ ${item.cantidad}x ${item.equipo} (${item.tension}) agregado al carrito.`);
+    }
   };
 
   const removeItem = (id) => {
@@ -232,6 +465,7 @@ function Bloque2_SSTT({
       externo: item.overrides?.externo ?? item.baseData?.externo ?? 0,
       costo_total_base: item.overrides?.costo_total_base ?? item.baseData?.costo_total_base ?? 0,
       is_tercerizado: item.overrides?.is_tercerizado ?? false,
+      margen: item.overrides?.margen ?? 50,
       margen_tercerizado: item.overrides?.margen_tercerizado ?? 30,
       modo_subcontrato: item.overrides?.modo_subcontrato ?? 'fijo',
       sub_esp_cant: item.overrides?.sub_esp_cant ?? 1,
@@ -268,7 +502,7 @@ function Bloque2_SSTT({
     };
     setCart(prev => prev.map(item => 
       item.id === editingItem 
-        ? { ...item, overrides: structuredClone(finalOverrides) } 
+        ? { ...item, overrides: structuredClone(finalOverrides), needsPriceReview: false } 
         : item
     ));
     setIsDirty(true);
@@ -276,7 +510,10 @@ function Bloque2_SSTT({
   };
 
   const handleSaveAdHoc = async () => {
-    if (!adHocState.equipo) return alert("Ingresa un nombre para el equipo.");
+    if (!adHocState.equipo) {
+      showFeedbackToast('⚠️ Ingresá un nombre para el equipo antes de guardar.');
+      return;
+    }
     
     const costoSubcontratoEfectivo = adHocState.is_tercerizado && adHocState.modo_subcontrato === 'jornal'
       ? ((Number(adHocState.sub_esp_cant) || 0) * (Number(adHocState.sub_esp_costo_dia) || 0) * (Number(adHocState.sub_esp_dias) || 0)) +
@@ -361,6 +598,8 @@ function Bloque2_SSTT({
     Margen_Imprevistos_Porcentaje: margenImprevistosPorcentaje,
     condicionTrabajo: condicionTrabajo,
     aplicarGastosIndirectos: activeAplicarIndirectos,
+    aplicarSSMAProvision: activeAplicarSSMA,
+    porcentajeSSMAProvision: porcentajeSSMAProvision || 5,
     logisticsOverrides: activeLogisticsOverrides
   };
 
@@ -370,7 +609,7 @@ function Bloque2_SSTT({
       equiposCotizados: structuredClone(cart),
       alquileres: structuredClone(alquileres)
     });
-  }, [nombreCliente, nombreProyecto, distanciaKm, diasPermitidosCorte, gastosImprevistos, margenImprevistosPorcentaje, condicionTrabajo, activeAplicarIndirectos, activeLogisticsOverrides, cart, alquileres]);
+  }, [nombreCliente, nombreProyecto, distanciaKm, diasPermitidosCorte, gastosImprevistos, margenImprevistosPorcentaje, condicionTrabajo, activeAplicarIndirectos, activeAplicarSSMA, porcentajeSSMAProvision, activeLogisticsOverrides, cart, alquileres]);
 
   const totalCostoTecnico = resultadosCalculados?.Precio_Venta_Final || 0;
 
@@ -656,7 +895,15 @@ function Bloque2_SSTT({
                       )}
 
                       <tr>
-                        <td style={{ padding: '10px', color: '#a855f7', fontWeight: 'bold' }}>Margen de Ganancia (%)</td>
+                        <td style={{ padding: '10px', color: '#a855f7', fontWeight: 'bold' }}>
+                          Markup sobre Costo (%)
+                          <div style={{ fontSize: '0.72rem', fontWeight: 400, color: '#94a3b8', marginTop: '2px' }}>
+                            Valor ingresado = ganancia sobre costo.<br/>
+                            Margen s/venta ≈ {overrideState.margen_tercerizado > 0
+                              ? ((1 - 1/(1 + overrideState.margen_tercerizado/100)) * 100).toFixed(1)
+                              : '0.0'}%
+                          </div>
+                        </td>
                         <td style={{ padding: '10px', color: '#64748b' }}>N/A</td>
                         <td style={{ padding: '10px' }}>
                           <input type="number" value={overrideState.margen_tercerizado} onChange={(e) => setOverrideState({...overrideState, margen_tercerizado: parseFloat(e.target.value)||0})} style={{ width: '100px', borderColor: '#a855f7' }} />
@@ -694,6 +941,18 @@ function Bloque2_SSTT({
                         </td>
                         <td style={{ padding: '10px', color: '#38bdf8', fontWeight: 'bold' }}>
                           {formatGs((overrideState.horas_equipo ?? 4) * TARIFA_EQUIPOS_HORA + ((overrideState.horas_servicio ?? overrideState.horas_equipo ?? 4) / 8) * (overrideState.interno ?? 1) * COSTO_ESPECIALISTA_DIA + ((overrideState.horas_servicio ?? overrideState.horas_equipo ?? 4) / 8) * (overrideState.ayudante ?? 1) * COSTO_AUXILIAR_DIA)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style={{ padding: '10px', color: '#10b981', fontWeight: 'bold' }}>Margen de Ganancia Propia (%)</td>
+                        <td style={{ padding: '10px', color: '#64748b' }}>50% (Estándar)</td>
+                        <td style={{ padding: '10px' }}>
+                          <input 
+                            type="number" 
+                            value={overrideState.margen !== undefined ? overrideState.margen : 50} 
+                            onChange={(e) => setOverrideState({...overrideState, margen: parseFloat(e.target.value)||0})} 
+                            style={{ width: '100px', borderColor: '#10b981', fontWeight: 'bold' }} 
+                          />
                         </td>
                       </tr>
                     </>
@@ -962,7 +1221,14 @@ function Bloque2_SSTT({
                     )}
 
                     <tr>
-                      <td style={{ padding: '8px', color: '#a855f7' }}>Margen de Ganancia (%)</td>
+                      <td style={{ padding: '8px', color: '#a855f7' }}>
+                        Markup sobre Costo (%)
+                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '1px' }}>
+                          Margen s/venta ≈ {adHocState.margen_tercerizado > 0
+                            ? ((1 - 1/(1 + adHocState.margen_tercerizado/100)) * 100).toFixed(1)
+                            : '0.0'}%
+                        </div>
+                      </td>
                       <td><input type="number" value={adHocState.margen_tercerizado} onChange={e => setAdHocState({...adHocState, margen_tercerizado: parseFloat(e.target.value)||0})} style={{ borderColor: '#a855f7' }}/></td>
                     </tr>
                   </>
@@ -1043,73 +1309,475 @@ function Bloque2_SSTT({
             </div>
           </div>
 
-          {/* 2. Carrito Técnico */}
-          <div className="odoo-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h2 style={{ margin: 0 }}><Calculator size={20} /> Carrito Técnico</h2>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button className="primary-btn" onClick={() => setShowCatalogModal(true)} style={{ width: 'auto', padding: '8px 16px', background: '#3b82f6' }}>
-                  <Plus size={16} /> Añadir Equipos al Carrito
+          {/* 2. Carrito Técnico & Mesa de Selección Rápida (3 Capas) */}
+          <div className="odoo-card" style={{ position: 'relative', borderLeft: '4px solid #3b82f6' }}>
+            
+            {/* Header con Acciones Principales */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Calculator size={22} color="#3b82f6" />
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Carrito Técnico & Selección Rápida</h2>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Sistema de 3 Capas: Macros, Catálogo a la Carta e Ingreso Manual</span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button 
+                  type="button"
+                  className="primary-btn" 
+                  onClick={handleAddManualItem} 
+                  style={{ width: 'auto', padding: '7px 14px', background: '#059669', fontSize: '0.85rem', fontWeight: 600 }}
+                  title="Agregar una partida libre donde puedes tipear descripción y costo unitario pactado"
+                >
+                  <Plus size={16} /> + Ítem Manual / Partida Global
                 </button>
-                <button className="primary-btn" onClick={() => setShowAdHocModal(true)} style={{ width: 'auto', padding: '8px 16px', background: '#10b981' }}>
+                <button 
+                  type="button"
+                  className="primary-btn" 
+                  onClick={() => setShowCatalogModal(true)} 
+                  style={{ width: 'auto', padding: '7px 14px', background: '#3b82f6', fontSize: '0.85rem' }}
+                  title="Abrir configurador visual por diagrama unifilar"
+                >
+                  <Layout size={16} /> Unifilar
+                </button>
+                <button 
+                  type="button"
+                  className="primary-btn" 
+                  onClick={() => setShowAdHocModal(true)} 
+                  style={{ width: 'auto', padding: '7px 14px', background: '#6366f1', fontSize: '0.85rem' }}
+                  title="Crear ítem con configuración completa y opción de guardar en Firestore"
+                >
                   <PackagePlus size={16} /> Ítem Ad-Hoc
                 </button>
               </div>
             </div>
-            
-            <div style={{ maxHeight: '45vh', overflowY: 'auto', paddingRight: '5px' }}>
+
+            {/* TOAST FEEDBACK NOTIFICATION */}
+            {toastMsg && (
+              <div style={{
+                position: 'absolute',
+                top: '12px',
+                right: '20px',
+                background: '#1e293b',
+                color: '#38bdf8',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                fontWeight: '600',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                zIndex: 10,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <Sparkles size={16} /> {toastMsg}
+              </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* CAPA 3: BARRA DE PLANTILLAS RÁPIDAS (MACROS FRONT-END) */}
+            {/* ========================================================================= */}
+            <div style={{
+              background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
+              border: '1px solid #ddd6fe',
+              borderRadius: '10px',
+              padding: '12px 16px',
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Zap size={18} color="#7c3aed" />
+                <div>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#5b21b6', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Plantillas Rápidas
+                  </span>
+                  <span style={{ display: 'block', fontSize: '0.75rem', color: '#6d28d9' }}>
+                    Inyección masiva de paquetes técnicos directo al estado React
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {/* BOTÓN MACRO PRINCIPAL SOLICITADO */}
+                <button
+                  type="button"
+                  onClick={handleInjectMacroPaqueteTrafo}
+                  style={{
+                    background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px 14px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 6px rgba(124, 58, 237, 0.3)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title="Inyecta 1x Ensayo Físico-Químico, 1x Cromatografía y 1x Extracción de Muestra de Aceite"
+                >
+                  <Zap size={15} color="#fef08a" /> ⚡ Paquete Mantenimiento Trafo
+                </button>
+
+                {/* MACRO COMPLEMENTARIO PCP 5 PUNTOS */}
+                <button
+                  type="button"
+                  onClick={handleInjectMacroPCPCompleto}
+                  style={{
+                    background: '#ffffff',
+                    color: '#7c3aed',
+                    border: '1px solid #c4b5fd',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}
+                  title="Inyecta los 5 puntos del PCP: Ensayos, Cromatografía, Limpiezas, Pruebas y Toma de Muestra"
+                >
+                  <Sparkles size={14} color="#7c3aed" /> ⚡ Mantenimiento Integral PCP (5 Ptos)
+                </button>
+              </div>
+            </div>
+
+            {/* ========================================================================= */}
+            {/* CAPA 2: CATÁLOGO A LA CARTA (Buscador <datalist>) */}
+            {/* ========================================================================= */}
+            <div style={{
+              background: '#f8fafc',
+              border: '1px solid var(--border-color)',
+              borderRadius: '10px',
+              padding: '12px 16px',
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              flexWrap: 'wrap'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569', minWidth: '110px' }}>
+                <Search size={16} color="#3b82f6" />
+                <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>A la Carta:</span>
+              </div>
+
+              <div style={{ flex: 1, minWidth: '220px', position: 'relative' }}>
+                <input
+                  type="text"
+                  list="sstt-catalog-datalist"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddFromDatalist();
+                    }
+                  }}
+                  placeholder="🔍 Busca: Ensayo Físico-Químico, Cromatografía, Aceite Dieléctrico..."
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.85rem',
+                    background: '#ffffff',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+                <datalist id="sstt-catalog-datalist">
+                  <option value="Ensayo Físico - Químico de aceite aislante según normas ASTM y IEC" />
+                  <option value="Análisis de gases disueltos por cromatografía" />
+                  <option value="Extracción de muestra de aceite mineral aislante para ensayo" />
+                  <option value="Limpiezas, mantenimientos, ajustes y controles de Trafo" />
+                  <option value="Mediciones, verificaciones y pruebas eléctricas de Trafo" />
+                  <option value="Tratamiento y Termovacío de Aceite Dieléctrico en Trafo" />
+                  <option value="Suministro de Aceite Dieléctrico Mineral (Tambor 200L)" />
+                  <option value="Inspección Termográfica Infrarroja de Subestación" />
+                  {catalogoSugerencias.dbItems.map((dbIt, idx) => (
+                    <option key={`db-${idx}`} value={dbIt.label} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Cant:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={searchCantidad}
+                    onChange={(e) => setSearchCantidad(e.target.value)}
+                    style={{ width: '50px', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', textAlign: 'center' }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddFromDatalist}
+                  disabled={!searchQuery.trim()}
+                  style={{
+                    padding: '8px 14px',
+                    background: searchQuery.trim() ? '#3b82f6' : '#94a3b8',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: 700,
+                    fontSize: '0.85rem',
+                    cursor: searchQuery.trim() ? 'pointer' : 'not-allowed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <Plus size={15} /> Agregar
+                </button>
+              </div>
+            </div>
+
+            {/* ========================================================================= */}
+            {/* LISTA DEL CARRITO TÉCNICO (CON EDICIÓN INLINE CAPA 1) */}
+            {/* ========================================================================= */}
+            <div style={{ maxHeight: '48vh', overflowY: 'auto', paddingRight: '5px' }}>
               {resultadosCalculados.equiposProcesados.length === 0 ? (
-                <div style={{ padding: '40px 20px', textAlign: 'center', background: '#f1f5f9', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-                  <PackagePlus size={32} color="#94a3b8" style={{ marginBottom: '10px' }} />
-                  <p style={{ color: 'var(--text-secondary)', margin: 0 }}>El carrito está vacío. Agrega equipos desde el catálogo.</p>
+                <div style={{ padding: '40px 20px', textAlign: 'center', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                  <PackagePlus size={36} color="#94a3b8" style={{ marginBottom: '10px' }} />
+                  <p style={{ color: 'var(--text-secondary)', margin: '0 0 10px 0', fontWeight: 600 }}>El carrito está vacío.</p>
+                  <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0 }}>
+                    Usa <strong>⚡ Paquete Mantenimiento Trafo</strong>, el buscador <strong>A la Carta</strong> o <strong>+ Ítem Manual</strong> para comenzar.
+                  </p>
                 </div>
               ) : (
-                resultadosCalculados.equiposProcesados.map(item => (
-                  <div key={item.id} className="cart-item" style={{ borderLeft: `4px solid ${item.overrides?.is_tercerizado ? '#a855f7' : 'var(--accent)'}`, background: '#ffffff', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', marginBottom: '0', borderRadius: '0' }}>
-                    <div className="cart-item-details" style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '8px' }}>
-                        <input 
-                          type="number" 
-                          value={item.cantidad} 
-                          min="1"
-                          onChange={(e) => updateQuantity(item.id, e.target.value)}
-                          style={{ width: '60px', padding: '6px', borderRadius: '4px' }}
-                        />
-                        <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
-                          x {item.equipo}
-                          {item.overrides && item.overrides.is_tercerizado && (
-                            <span style={{ fontSize: '0.7rem', background: '#a855f7', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>
-                              {item.overrides.modo_subcontrato === 'jornal'
-                                ? `Subcontrato Jornal (${(item.overrides.sub_esp_cant || 0) + (item.overrides.sub_aux_cant || 0)} pers)`
-                                : 'Tercerizado'}
-                            </span>
-                          )}
-                          {item.overrides && item.overrides.top_down_enabled && (
-                            <span style={{ fontSize: '0.7rem', background: '#10b981', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>Top-Down</span>
-                          )}
-                          {item.overrides && item.overrides.modoUso === 'Reserva' && (
-                            <span style={{ fontSize: '0.7rem', background: '#3b82f6', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>Reserva</span>
-                          )}
-                          {isItemModified(item) && (
-                            <span style={{ fontSize: '0.7rem', background: '#f59e0b', color: 'white', padding: '2px 8px', borderRadius: '12px' }}>Modificado</span>
-                          )}
-                        </h4>
+                resultadosCalculados.equiposProcesados.map((item, index) => {
+                  const isTerc = item.overrides?.is_tercerizado;
+                  const costoDirecto = isTerc ? (item.overrides?.costo_total_base ?? item.baseData?.costo_total_base ?? 0) : item.costo_directo_unitario;
+
+                  return (
+                    <div 
+                      key={item.id || index} 
+                      className="cart-item" 
+                      style={{ 
+                        borderLeft: `4px solid ${isTerc ? '#a855f7' : 'var(--accent)'}`, 
+                        background: '#ffffff', 
+                        padding: '14px 16px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between', 
+                        borderBottom: '1px solid var(--border-color)', 
+                        marginBottom: '0', 
+                        borderRadius: '0',
+                        gap: '12px'
+                      }}
+                    >
+                      {/* Cantidad & Descripción */}
+                      <div className="cart-item-details" style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                          <input 
+                            type="number" 
+                            value={item.cantidad} 
+                            min="1"
+                            onChange={(e) => updateQuantity(item.id, e.target.value)}
+                            style={{ width: '52px', padding: '5px', borderRadius: '4px', textAlign: 'center', fontWeight: 'bold' }}
+                            title="Cantidad de unidades"
+                          />
+                          
+                          {/* Input de descripción editable inline */}
+                          <input
+                            type="text"
+                            value={item.equipo}
+                            onChange={(e) => updateItemName(item.id, e.target.value)}
+                            style={{
+                              flex: 1,
+                              border: item.needsPriceReview ? '1px solid #f97316' : '1px solid transparent',
+                              background: item.needsPriceReview ? '#fff7ed' : 'transparent',
+                              fontWeight: 700,
+                              fontSize: '0.95rem',
+                              color: item.needsPriceReview ? '#c2410c' : 'var(--text-primary)',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              transition: 'border 0.2s',
+                              textOverflow: 'ellipsis'
+                            }}
+                            onFocus={(e) => e.target.style.border = '1px solid #94a3b8'}
+                            onBlur={(e) => e.target.style.border = item.needsPriceReview ? '1px solid #f97316' : '1px solid transparent'}
+                            title="Haz clic para editar la descripción"
+                          />
+
+                          {/* Badges */}
+                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                            {isTerc && (
+                              <span style={{ fontSize: '0.68rem', background: '#a855f7', color: 'white', padding: '2px 7px', borderRadius: '10px', fontWeight: 600 }}>
+                                {item.overrides?.modo_subcontrato === 'jornal'
+                                  ? `Jornal (${(item.overrides.sub_esp_cant || 0) + (item.overrides.sub_aux_cant || 0)}p)`
+                                  : 'SSTT Flat'}
+                              </span>
+                            )}
+                            {item.overrides?.top_down_enabled && (
+                              <span style={{ fontSize: '0.68rem', background: '#10b981', color: 'white', padding: '2px 7px', borderRadius: '10px', fontWeight: 600 }}>Top-Down</span>
+                            )}
+                            {item.overrides?.modoUso === 'Reserva' && (
+                              <span style={{ fontSize: '0.68rem', background: '#3b82f6', color: 'white', padding: '2px 7px', borderRadius: '10px', fontWeight: 600 }}>Reserva</span>
+                            )}
+                            {isItemModified(item) && (
+                              <span style={{ fontSize: '0.68rem', background: '#f59e0b', color: 'white', padding: '2px 7px', borderRadius: '10px', fontWeight: 600 }}>Modificado</span>
+                            )}
+                            {item.needsPriceReview && (
+                              <span style={{ fontSize: '0.68rem', background: '#ea580c', color: 'white', padding: '2px 7px', borderRadius: '10px', fontWeight: 700, animation: 'pulse 1.5s infinite' }}
+                                title="Este ítem no está en el catálogo. El costo es Gs. 0 — abrí el modal de edición para ajustar el precio antes de enviar la cotización.">
+                                ⚠️ COSTO PENDIENTE
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Fila de Tensión y Costo Unitario Pactado */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', fontSize: '0.82rem', color: '#64748b' }}>
+                          <span>{item.tension || 'N/A'}</span>
+                          <span>•</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>Costo Unit. Pactado:</span>
+                            <input
+                              type="number"
+                              value={costoDirecto}
+                              onChange={(e) => updateItemCosto(item.id, e.target.value)}
+                              style={{
+                                width: '110px',
+                                padding: '3px 6px',
+                                fontSize: '0.8rem',
+                                borderRadius: '4px',
+                                border: '1px solid #cbd5e1',
+                                background: '#f8fafc',
+                                fontWeight: 600,
+                                color: '#334155'
+                              }}
+                              title="Costo unitario directo o de subcontratista pactado (Gs.)"
+                            />
+                            <span>Gs.</span>
+                          </div>
+                        </div>
                       </div>
-                      <p style={{ margin: 0, fontSize: '0.9rem' }}>{item.tension} <span style={{ color: 'var(--border-color)', margin: '0 8px' }}>|</span> {item.overrides?.is_tercerizado ? 'Costo Subcontratista' : 'Costo Directo Total'}: {formatGs(item.costo_directo_unitario)}</p>
+
+                      {/* Total y Acciones */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ display: 'block', fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                            {formatGs(item.precio_total_final)}
+                          </span>
+                          <span style={{ fontSize: '0.72rem', color: '#64748b' }}>P. Venta Total</span>
+                        </div>
+                        <button 
+                          type="button"
+                          className="primary-btn" 
+                          onClick={() => openEditModal(item)} 
+                          style={{ padding: '7px 9px', width: 'auto', background: '#f8fafc', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px' }} 
+                          title="Configuración avanzada / Override"
+                        >
+                          <Edit2 size={15} />
+                        </button>
+                        <button 
+                          type="button"
+                          className="remove-btn" 
+                          onClick={() => removeItem(item.id)} 
+                          style={{ padding: '7px 9px', borderRadius: '6px' }}
+                          title="Eliminar del carrito"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span className="cart-item-price" style={{ fontSize: '1.2rem', color: 'var(--text-primary)' }}>{formatGs(item.precio_total_final)}</span>
-                      <button className="primary-btn" onClick={() => openEditModal(item)} style={{ padding: '8px', width: 'auto', background: '#f8fafc', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px' }} title="Editar Variables Base">
-                        <Edit2 size={16} />
-                      </button>
-                      <button className="remove-btn" onClick={() => removeItem(item.id)} style={{ padding: '8px', borderRadius: '6px' }}>
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
+
+            {/* FOOTER DEL CARRITO: TOGGLE PROVISIÓN SSMA Y CONSUMIBLES (5% PARETO) */}
+            <div style={{
+              marginTop: '16px',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              border: activeAplicarSSMA ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
+              background: activeAplicarSSMA ? 'rgba(16, 185, 129, 0.06)' : '#f8fafc',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '12px',
+              transition: 'all 0.25s ease'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ShieldCheck size={22} color={activeAplicarSSMA ? '#059669' : '#94a3b8'} />
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <strong style={{ fontSize: '0.92rem', color: activeAplicarSSMA ? '#065f46' : '#64748b' }}>
+                      Aplicar Provisión Estándar de SSMA y Consumibles
+                    </strong>
+                    <span style={{
+                      fontSize: '0.72rem',
+                      background: activeAplicarSSMA ? '#d1fae5' : '#e2e8f0',
+                      color: activeAplicarSSMA ? '#047857' : '#64748b',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      fontWeight: 700
+                    }}>
+                      5% Pareto
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginTop: '2px' }}>
+                    {activeAplicarSSMA
+                      ? `EPP, guantes, trapos y seguridad industrial calculados automáticamente (${formatGs(resultadosCalculados?.Costo_SSMA_Consumibles || 0)})`
+                      : 'Provisión desactivada (0 Gs.)'}
+                  </span>
+                </div>
+              </div>
+
+              {/* SWITCH / TOGGLE */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {activeAplicarSSMA && (
+                  <span style={{ fontSize: '0.95rem', fontWeight: 800, color: '#059669' }}>
+                    +{formatGs(resultadosCalculados?.Costo_SSMA_Consumibles || 0)}
+                  </span>
+                )}
+                <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', margin: 0, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={activeAplicarSSMA}
+                    onChange={(e) => {
+                      updateAplicarSSMA(e.target.checked);
+                      setIsDirty(true);
+                    }}
+                    style={{ opacity: 0, width: 0, height: 0 }}
+                  />
+                  <span style={{
+                    position: 'absolute',
+                    cursor: 'pointer',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: activeAplicarSSMA ? '#10b981' : '#cbd5e1',
+                    transition: '0.3s',
+                    borderRadius: '24px'
+                  }}>
+                    <span style={{
+                      position: 'absolute',
+                      content: '""',
+                      height: '18px',
+                      width: '18px',
+                      left: activeAplicarSSMA ? '22px' : '3px',
+                      bottom: '3px',
+                      backgroundColor: 'white',
+                      transition: '0.3s',
+                      borderRadius: '50%',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                    }}></span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
           </div>
 
           {/* 3. Operaciones y Riesgos (Centro de Gastos Indirectos) */}

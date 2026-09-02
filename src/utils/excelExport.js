@@ -20,6 +20,9 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
     precioVentaLogistica = 0,
     gastosImprevistos = 0,
     gananciaImprevistos = 0,
+    costoSSMA = 0,
+    gananciaSSMA = 0,
+    precioVentaSSMA = 0,
     gastosAdminSSTT = 0,
     esLicitacion = false,
     moneda = 'USD',      // Moneda seleccionada para la oferta final
@@ -111,15 +114,20 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
   const sumaCostoDirectoSSTTTotal = serviciosProcesados
     .reduce((acc, s) => acc + s.subtotalDirectoTotal, 0);
 
+  const sumaBaseSSMA = serviciosProcesados
+    .reduce((acc, s) => acc + (s.esTercerizado ? (s.cSubc * s.cantidad) : (s.cMO * s.cantidad)), 0);
+
   const logisticaConvertida = safeNum(convertir(logisticaGlobal, 'PYG'));
   const imprevistosConvertidos = safeNum(convertir(gastosImprevistos, 'PYG'));
   const adminSSTTConvertido = safeNum(convertir(gastosAdminSSTT, 'PYG'));
+  const ssmaConvertido = safeNum(convertir(costoSSMA, 'PYG'));
 
   const itemsSSTT = serviciosProcesados.map(item => {
     const qty = item.cantidad;
     let logAsignada = 0;
     let impAsignado = 0;
     let adminAsignado = 0;
+    let ssmaAsignado = 0;
 
     if (!item.esTercerizado && sumaMOPropia > 0) {
       // Regla de Negocio: Logística e Imprevistos se asignan al Personal Propio
@@ -132,6 +140,13 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
       impAsignado = 0;
     }
 
+    if (item.ssmaAsignado !== undefined && item.ssmaAsignado > 0) {
+      ssmaAsignado = safeNum(convertir(item.ssmaAsignado, item.moneda || 'PYG'));
+    } else if (sumaBaseSSMA > 0 && ssmaConvertido > 0) {
+      const baseItem = item.esTercerizado ? (item.cSubc * qty) : (item.cMO * qty);
+      ssmaAsignado = ssmaConvertido * (baseItem / sumaBaseSSMA);
+    }
+
     if (sumaCostoDirectoSSTTTotal > 0) {
       const pesoDirecto = item.subtotalDirectoTotal / sumaCostoDirectoSSTTTotal;
       adminAsignado = adminSSTTConvertido * pesoDirecto;
@@ -139,7 +154,7 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
 
     const costoTotalReal = item.costo_total_real 
       ? safeNum(convertir(item.costo_total_real, item.moneda || 'PYG')) 
-      : (item.subtotalDirectoTotal + logAsignada + impAsignado + adminAsignado);
+      : (item.subtotalDirectoTotal + logAsignada + impAsignado + adminAsignado + ssmaAsignado);
       
     const margen = item.margen !== undefined ? safeNum(item.margen) : 0.15;
     
@@ -156,6 +171,7 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
       ...item,
       logAsignada,
       impAsignado,
+      ssmaAsignado,
       adminAsignado,
       costoTotalReal,
       margen,
@@ -642,10 +658,10 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
   // HOJA 3: Auditoría SSTT y Apoyos Especiales (Arquitectura Completa y Transparente)
   // =========================================================================
   const sheet3 = workbook.addWorksheet('Auditoría SSTT');
-  const colsSheet3 = [6, 40, 13, 7, 10, 10, 18, 18, 18, 16, 16, 20, 20, 18, 18, 18, 20, 11, 20, 22];
+  const colsSheet3 = [6, 40, 13, 7, 10, 10, 18, 18, 18, 16, 16, 20, 20, 18, 18, 18, 18, 20, 11, 20, 22];
   colsSheet3.forEach((w, i) => { sheet3.getColumn(i + 1).width = w; });
 
-  sheet3.mergeCells('A1:T2');
+  sheet3.mergeCells('A1:U2');
   const title3 = sheet3.getCell('A1');
   title3.value = 'AUDITORÍA GERENCIAL - SERVICIOS TÉCNICOS Y EQUIPOS DE APOYO (SSTT)';
   title3.fill = blueFill;
@@ -670,6 +686,7 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
     `Subtotal Directo Total (${moneda})`,
     `Logística Total (${moneda})`,
     `Imprevistos Total (${moneda})`,
+    `SSMA y Consumibles (${moneda})`,
     `Gastos Admin Total (${moneda})`,
     `Costo Total Real (${moneda})`,
     'Margen (%)',
@@ -693,7 +710,7 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
   let sumSSTTHorasEq = 0, sumSSTTHorasServ = 0, sumSSTTTec = 0, sumSSTTMO = 0;
   let sumSSTTSubc = 0, sumSSTTFee = 0, sumSSTTAmort = 0;
   let sumSSTTSubDirectoUnit = 0, sumSSTTSubDirectoTotal = 0;
-  let sumSSTTLog = 0, sumSSTTImp = 0, sumSSTTAdmin = 0;
+  let sumSSTTLog = 0, sumSSTTImp = 0, sumSSTTSSMA = 0, sumSSTTAdmin = 0;
   let sumSSTTCostoReal = 0, sumSSTTVentaNeto = 0, sumSSTTVentaIVA = 0;
 
   itemsSSTT.forEach(item => {
@@ -710,6 +727,7 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
     sumSSTTSubDirectoTotal += item.subtotalDirectoTotal;
     sumSSTTLog += item.logAsignada;
     sumSSTTImp += item.impAsignado;
+    sumSSTTSSMA += (item.ssmaAsignado || 0);
     sumSSTTAdmin += item.adminAsignado;
     sumSSTTCostoReal += item.costoTotalReal;
     sumSSTTVentaNeto += item.precioVentaNeto;
@@ -739,11 +757,12 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
       0, // Col 13: Subtotal Directo Total
       item.logAsignada,
       item.impAsignado,
-      item.adminAsignado,
-      0, // Col 17: Costo Total Real
-      item.margen,
-      0, // Col 19: PU c/ IVA
-      0  // Col 20: PT c/ IVA
+      item.ssmaAsignado || 0, // Col 16: SSMA
+      item.adminAsignado,     // Col 17: Admin
+      0, // Col 18: Costo Total Real
+      item.margen, // Col 19: Margen
+      0, // Col 20: PU c/ IVA
+      0  // Col 21: PT c/ IVA
     ]);
 
     const r = row.number;
@@ -752,12 +771,12 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
 
     row.getCell(12).value = { formula: `G${r}+H${r}+I${r}+J${r}+K${r}`, result: item.subtotalDirectoUnit };
     row.getCell(13).value = { formula: `D${r}*L${r}`, result: item.subtotalDirectoTotal };
-    row.getCell(17).value = { formula: `M${r}+N${r}+O${r}+P${r}`, result: item.costoTotalReal };
-    row.getCell(19).value = { formula: `T${r}/D${r}`, result: item.precioUnitarioConIVA };
-    row.getCell(20).value = { formula: `(Q${r}/(1-R${r}))*1.10`, result: item.precioVentaConIVA };
+    row.getCell(18).value = { formula: `M${r}+N${r}+O${r}+P${r}+Q${r}`, result: item.costoTotalReal };
+    row.getCell(20).value = { formula: `U${r}/D${r}`, result: item.precioUnitarioConIVA };
+    row.getCell(21).value = { formula: `(R${r}/(1-S${r}))*1.10`, result: item.precioVentaConIVA };
 
-    [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20].forEach(col => row.getCell(col).numFmt = moneyFormat);
-    row.getCell(18).numFmt = percentFormat;
+    [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21].forEach(col => row.getCell(col).numFmt = moneyFormat);
+    row.getCell(19).numFmt = percentFormat;
     row.getCell(1).alignment = { horizontal: 'center' };
     row.getCell(3).alignment = { horizontal: 'center' };
     row.getCell(4).alignment = { horizontal: 'center' };
@@ -784,12 +803,13 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
     totalRow3.getCell(13).value = { formula: `SUM(M${startRowSSTTAudit}:M${endRowSSTTAudit})`, result: sumSSTTSubDirectoTotal };
     totalRow3.getCell(14).value = { formula: `SUM(N${startRowSSTTAudit}:N${endRowSSTTAudit})`, result: sumSSTTLog };
     totalRow3.getCell(15).value = { formula: `SUM(O${startRowSSTTAudit}:O${endRowSSTTAudit})`, result: sumSSTTImp };
-    totalRow3.getCell(16).value = { formula: `SUM(P${startRowSSTTAudit}:P${endRowSSTTAudit})`, result: sumSSTTAdmin };
-    totalRow3.getCell(17).value = { formula: `SUM(Q${startRowSSTTAudit}:Q${endRowSSTTAudit})`, result: sumSSTTCostoReal };
-    totalRow3.getCell(20).value = { formula: `SUM(T${startRowSSTTAudit}:T${endRowSSTTAudit})`, result: sumSSTTVentaIVA };
+    totalRow3.getCell(16).value = { formula: `SUM(P${startRowSSTTAudit}:P${endRowSSTTAudit})`, result: sumSSTTSSMA };
+    totalRow3.getCell(17).value = { formula: `SUM(Q${startRowSSTTAudit}:Q${endRowSSTTAudit})`, result: sumSSTTAdmin };
+    totalRow3.getCell(18).value = { formula: `SUM(R${startRowSSTTAudit}:R${endRowSSTTAudit})`, result: sumSSTTCostoReal };
+    totalRow3.getCell(21).value = { formula: `SUM(U${startRowSSTTAudit}:U${endRowSSTTAudit})`, result: sumSSTTVentaIVA };
 
     totalRow3.eachCell(c => { c.font = blackFontBold; c.border = thinBorder; });
-    [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20].forEach(col => totalRow3.getCell(col).numFmt = moneyFormat);
+    [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21].forEach(col => totalRow3.getCell(col).numFmt = moneyFormat);
     totalRow3.fill = sectionFill;
   }
 

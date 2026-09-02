@@ -53,6 +53,13 @@ export default function Bloque1_Procura({
   // Estado UX TDAH para el panel "Setea y Olvida"
   const [isSeteaOpen, setIsSeteaOpen] = useState(false);
 
+  // P7: Toast local para reemplazar alert() — no requiere prop del padre
+  const [localToast, setLocalToast] = useState(null);
+  const showLocalToast = (msg, type = 'info') => {
+    setLocalToast({ msg, type });
+    setTimeout(() => setLocalToast(null), 3500);
+  };
+
   // `defaults` y `equipos` son ahora props del EPCDashboard (Single Source of Truth).
   // Ver EPCDashboard.jsx → useState equiposProcura / procuraDefaults.
 
@@ -254,8 +261,14 @@ export default function Bloque1_Procura({
   };
 
   const handleSaveEquipo = () => {
-    if (!formData.nombre.trim()) return alert('Por favor, ingresa el nombre del equipo.');
-    if (parseFloat(formData.costoBase) <= 0) return alert('Ingresa un costo base válido.');
+    if (!formData.nombre.trim()) {
+      showLocalToast('Ingresá el nombre del equipo antes de guardar.', 'error');
+      return;
+    }
+    if (parseFloat(formData.costoBase) <= 0) {
+      showLocalToast('Ingresá un costo base válido (mayor a 0).', 'error');
+      return;
+    }
 
     if (editingId) {
       setEquipos(prev => prev.map(item => item.id === editingId ? { ...formData } : item));
@@ -284,7 +297,7 @@ export default function Bloque1_Procura({
         // Leer el archivo como matriz 2D para mayor control sobre filas vacías y títulos
         const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         if (rows.length === 0) {
-          alert('El archivo Excel está vacío.');
+          showLocalToast('El archivo Excel está vacío.', 'error');
           return;
         }
 
@@ -320,8 +333,8 @@ export default function Bloque1_Procura({
         }
 
         if (headerRowIndex === -1) {
-          const firstFewRows = rows.slice(0, 3).map(r => r.join(', ')).join('\n');
-          alert(`No se detectó la fila de cabeceras en el Excel. \n\nPrimeras filas leídas:\n${firstFewRows}\n\nAsegúrate de tener columnas llamadas Ítem, Cantidad, Modalidad y Costo Base.`);
+          const firstFewRows = rows.slice(0, 3).map(r => r.join(', ')).join(' | ');
+          showLocalToast(`No se detectó la fila de cabeceras. Primeras filas: ${firstFewRows}. Asegúrate de tener columnas llamadas Ítem, Cantidad, Modalidad y Costo Base.`, 'error');
           return;
         }
 
@@ -372,11 +385,11 @@ export default function Bloque1_Procura({
           const firstRowKeys = Object.keys(normalizedData[0]);
           const missing = requiredCols.filter(col => !firstRowKeys.includes(col));
           if (missing.length > 0) {
-            alert(`El Excel no cumple con el formato requerido. \n\nColumnas detectadas: ${firstRowKeys.join(', ')} \nColumnas faltantes: ${missing.join(', ')} \n\nPor favor, verifica los nombres de tus columnas.`);
+            showLocalToast(`Columnas faltantes en el Excel: ${missing.join(', ')}. Detectó: ${firstRowKeys.join(', ')}.`, 'error');
             return;
           }
         } else {
-          alert('El archivo Excel no contiene filas de datos válidas.');
+          showLocalToast('El archivo Excel no contiene filas de datos válidas.', 'error');
           return;
         }
 
@@ -405,10 +418,10 @@ export default function Bloque1_Procura({
         });
 
         setEquipos(prev => [...prev, ...newEquipos]);
-        alert(`✅ Se importaron ${newEquipos.length} equipos desde el archivo Excel.`);
+        showLocalToast(`✅ Se importaron ${newEquipos.length} equipos desde el archivo Excel.`, 'success');
       } catch (err) {
         console.error(err);
-        alert('Ocurrió un error al procesar el archivo Excel. Asegúrate de usar un archivo válido.');
+        showLocalToast('Ocurrió un error al procesar el archivo Excel. Asegúrate de usar un archivo .xlsx válido.', 'error');
       }
     };
     reader.readAsArrayBuffer(file);
@@ -449,6 +462,28 @@ export default function Bloque1_Procura({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
       
+      {/* P7: Toast local no-bloqueante (reemplaza alert() de validaciones) */}
+      {localToast && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          zIndex: 99999,
+          background: localToast.type === 'error' ? '#ef4444' : localToast.type === 'success' ? '#22c55e' : '#3b82f6',
+          color: 'white',
+          padding: '12px 20px',
+          borderRadius: '10px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.18)',
+          fontWeight: 600,
+          fontSize: '0.9rem',
+          maxWidth: '420px',
+          lineHeight: 1.4,
+          animation: 'slideInFromRight 0.3s ease'
+        }}>
+          {localToast.msg}
+        </div>
+      )}
+
       {/* FASE 1: PANEL GLOBAL "SETEA Y OLVIDA" (Colapsable) */}
       <div className="odoo-card" style={{ background: '#ffffff', borderLeft: '4px solid #475569', padding: '0' }}>
         <div 

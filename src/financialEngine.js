@@ -234,8 +234,14 @@ export const calcularCotizacionActiva = (cotizacion) => {
 
   const Total_Alquileres = alquileres.reduce((sum, alq) => sum + (Number(alq.costo) || 0), 0);
 
+  // Provisión Estándar de SSMA y Consumibles (Regla de Pareto 5% sobre Mano de Obra y Subcontratos)
+  const aplicarSSMAProvision = cotizacion.aplicarSSMAProvision !== false && cotizacion.applySSMAProvision !== false;
+  const porcentajeSSMA = Number(cotizacion.porcentajeSSMAProvision ?? 5);
+  const baseCalculoSSMA = Costo_Mano_Obra_Total + Costo_Subcontratistas_Total;
+  const Costo_SSMA_Consumibles = aplicarSSMAProvision ? (baseCalculoSSMA * (porcentajeSSMA / 100)) : 0;
+
   // Costo Directo Total Puro
-  const Costo_Directo_Total = Costo_Tecnologia_Total + Costo_Mano_Obra_Total + Logistica_Global_Total + Total_Alquileres + Costo_Subcontratistas_Total + Gastos_Imprevistos + Costo_ServiceFee_Total + Costo_Amortizacion_Total;
+  const Costo_Directo_Total = Costo_Tecnologia_Total + Costo_Mano_Obra_Total + Logistica_Global_Total + Total_Alquileres + Costo_Subcontratistas_Total + Gastos_Imprevistos + Costo_ServiceFee_Total + Costo_Amortizacion_Total + Costo_SSMA_Consumibles;
 
   // Gastos Administrativos (3% sobre Costo Directo Total)
   const Gastos_Administrativos = Costo_Directo_Total * (Variables_Globales.Gastos_Administrativos_Porcentaje / 100);
@@ -259,12 +265,19 @@ export const calcularCotizacionActiva = (cotizacion) => {
     let logAsignada = 0;
     let impAsignado = 0;
     let adminAsignado = 0;
+    let ssmaAsignado = 0;
 
     // Regla de Negocio: Logística e Imprevistos se absorben 100% en Mano de Obra Propia
     if (!item.isTercerizado && sumaMOPropia > 0) {
       const pesoMO = (item.Costo_MO_Item * qty) / sumaMOPropia;
       logAsignada = Logistica_Global_Total * pesoMO;
       impAsignado = Gastos_Imprevistos * pesoMO;
+    }
+
+    // Regla de Negocio: Provisión SSMA y Consumibles absorbida en Mano de Obra / Subcontrato
+    if (baseCalculoSSMA > 0 && Costo_SSMA_Consumibles > 0) {
+      const baseItem = item.isTercerizado ? (item.Costo_Subcontrato_Item * qty) : (item.Costo_MO_Item * qty);
+      ssmaAsignado = Costo_SSMA_Consumibles * (baseItem / baseCalculoSSMA);
     }
 
     // Regla de Negocio: Gastos Administrativos (Overhead 3%) se prorratean en SSTT
@@ -274,7 +287,7 @@ export const calcularCotizacionActiva = (cotizacion) => {
     }
 
     // Costo Total Real Absorbido
-    const costo_total_real = item.Costo_Directo_Total_Item + logAsignada + impAsignado + adminAsignado;
+    const costo_total_real = item.Costo_Directo_Total_Item + logAsignada + impAsignado + adminAsignado + ssmaAsignado;
     
     // Ecuación de Rentabilidad Core: Precio_Venta = Costo_Total_Absorbido / (1 - Margen)
     const divisor = Math.max(0.01, 1 - Math.min(0.99, item.margenDecimal));
@@ -299,6 +312,7 @@ export const calcularCotizacionActiva = (cotizacion) => {
       estrategia: item.isTercerizado ? 'Subcontrato' : (item.isTopDown ? 'Top-Down' : 'Normal'),
       costo_directo_unitario: item.Costo_Directo_Unitario,
       admin_unitario: qty > 0 ? (adminAsignado / qty) : 0,
+      ssma_unitario: qty > 0 ? (ssmaAsignado / qty) : 0,
       utilidad_neta_unitaria,
       precio_unitario_final,
       precio_total_final,
@@ -308,6 +322,7 @@ export const calcularCotizacionActiva = (cotizacion) => {
       logAsignada,
       impAsignado,
       adminAsignado,
+      ssmaAsignado,
       margen: item.margenDecimal,
       // Desglose crudo para Auditoría
       Costo_Tecnologia_Item: item.Costo_Tecnologia,
@@ -370,7 +385,9 @@ export const calcularCotizacionActiva = (cotizacion) => {
   // Desglose de Ganancias para el Panel del CRM
   const Ganancia_Logistica = Logistica_Global_Total * (Variables_Globales.Margen_Ganancia_Logistica / 100);
   const Ganancia_Imprevistos = Gastos_Imprevistos * (Margen_Imprevistos_Porcentaje > 0 ? (Margen_Imprevistos_Porcentaje / 100) : 0.30);
-  const Ganancia_Ingenieria_Pura = Math.max(0, gananciaIngenieriaTotal - Ganancia_Logistica - Ganancia_Imprevistos);
+  const Ganancia_SSMA = Costo_SSMA_Consumibles * 0.30;
+  const Ganancia_Tecnologia_Total = Costo_Tecnologia_Total * (Variables_Globales.MARGEN_TECNOLOGIA || 0.40);
+  const Ganancia_Ingenieria_Pura = Math.max(0, gananciaIngenieriaTotal - Ganancia_Tecnologia_Total - Ganancia_Logistica - Ganancia_Imprevistos - (aplicarSSMAProvision ? Ganancia_SSMA : 0));
   const Precio_Venta_Logistica = Logistica_Global_Total + Ganancia_Logistica;
 
   return {
@@ -396,6 +413,11 @@ export const calcularCotizacionActiva = (cotizacion) => {
     Costo_Subcontratistas_Total,
     Total_Alquileres,
     Gastos_Imprevistos,
+    Costo_SSMA_Consumibles,
+    aplicarSSMAProvision,
+    porcentajeSSMAProvision: porcentajeSSMA,
+    Ganancia_SSMA_Consumibles: Ganancia_SSMA,
+    Precio_SSMA_Consumibles: Costo_SSMA_Consumibles / 0.70,
     Costo_Directo_Total,
     Ganancia_Ingenieria: Ganancia_Ingenieria_Pura,
     Ganancia_Logistica,
@@ -412,7 +434,7 @@ export const calcularCotizacionActiva = (cotizacion) => {
     Cantidad_Equipos_TopDown,
     Precio_Mercado_Aplicado,
     Precio_Mercado_Total_Trafos,
-    Ganancia_Tecnologia_Total: gananciaTecnologiaTotal,
+    Ganancia_Tecnologia_Total,
     Utilidad_Oculta_TopDown: 0,
     Precio_Venta_Logistica,
     equiposProcesados,
