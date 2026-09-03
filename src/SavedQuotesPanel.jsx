@@ -23,11 +23,36 @@ export default function SavedQuotesPanel({ isOpen, onClose, onLoadQuote }) {
 
   const formatDate = (timestamp) => {
     if (!timestamp) return 'Fecha desconocida';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleDateString('es-PY', { 
-      day: '2-digit', month: '2-digit', year: 'numeric', 
-      hour: '2-digit', minute: '2-digit' 
-    });
+    try {
+      if (typeof timestamp.toDate === 'function') {
+        return timestamp.toDate().toLocaleDateString('es-PY', { 
+          day: '2-digit', month: '2-digit', year: 'numeric', 
+          hour: '2-digit', minute: '2-digit' 
+        });
+      }
+      if (typeof timestamp.toMillis === 'function') {
+        return new Date(timestamp.toMillis()).toLocaleDateString('es-PY', { 
+          day: '2-digit', month: '2-digit', year: 'numeric', 
+          hour: '2-digit', minute: '2-digit' 
+        });
+      }
+      if (typeof timestamp.seconds === 'number') {
+        return new Date(timestamp.seconds * 1000).toLocaleDateString('es-PY', { 
+          day: '2-digit', month: '2-digit', year: 'numeric', 
+          hour: '2-digit', minute: '2-digit' 
+        });
+      }
+      const d = new Date(timestamp);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('es-PY', { 
+          day: '2-digit', month: '2-digit', year: 'numeric', 
+          hour: '2-digit', minute: '2-digit' 
+        });
+      }
+      return 'Fecha desconocida';
+    } catch {
+      return 'Fecha desconocida';
+    }
   };
 
   if (!isOpen) return null;
