@@ -80,6 +80,8 @@ export default function EPCDashboard() {
   const [margenImprevistosPorcentaje, setMargenImprevistosPorcentaje] = useState(0);
   const [condicionTrabajo, setCondicionTrabajo] = useState(1.0);
   const [aplicarGastosIndirectos, setAplicarGastosIndirectos] = useState(true);
+  const [aplicarSSMAProvision, setAplicarSSMAProvision] = useState(true);
+  const [porcentajeSSMAProvision, setPorcentajeSSMAProvision] = useState(5);
   const [logisticsOverrides, setLogisticsOverrides] = useState({ enabled: false });
 
   // Estado Global Bloque 0
@@ -117,6 +119,11 @@ export default function EPCDashboard() {
       showToast('Por favor, ingresa el Cliente y Nombre del Proyecto en el Bloque 0.', 'error');
       return;
     }
+    // P5: Protección contra tipo de cambio 0 — evita gran total incorrecto silencioso
+    if (!tipoCambioVenta || Number(tipoCambioVenta) <= 0) {
+      showToast('El tipo de cambio USD/PYG no puede ser 0. Verificá el Bloque 0 antes de guardar.', 'error');
+      return;
+    }
     setIsSaving(true);
     try {
       const dataToSave = {
@@ -139,6 +146,8 @@ export default function EPCDashboard() {
           margenImprevistosPorcentaje,
           condicionTrabajo,
           aplicarGastosIndirectos,
+          aplicarSSMAProvision,
+          porcentajeSSMAProvision,
           logisticsOverrides
         },
         totales: {
@@ -146,6 +155,13 @@ export default function EPCDashboard() {
           totalServicios,
           granTotalGs: (totalProcura * tipoCambioVenta) + totalServicios,
           granTotalUSD: totalProcura + (totalServicios / tipoCambioVenta)
+        },
+        // P4: Snapshot del tipo de cambio al momento de guardar
+        // Permite auditar el precio histórico sin depender del TC actual
+        tipoCambioSnapshot: {
+          compra: tipoCambioCompra,
+          venta: tipoCambioVenta,
+          fechaSnapshot: new Date().toISOString()
         }
       };
 
@@ -191,6 +207,8 @@ export default function EPCDashboard() {
     setMargenImprevistosPorcentaje(sstt.margenImprevistosPorcentaje ?? quote.Margen_Imprevistos_Porcentaje ?? 0);
     setCondicionTrabajo(sstt.condicionTrabajo ?? quote.condicionTrabajo ?? 1.0);
     setAplicarGastosIndirectos(sstt.aplicarGastosIndirectos !== undefined ? sstt.aplicarGastosIndirectos : (quote.aplicarGastosIndirectos ?? true));
+    setAplicarSSMAProvision(sstt.aplicarSSMAProvision !== undefined ? sstt.aplicarSSMAProvision : (quote.aplicarSSMAProvision ?? true));
+    setPorcentajeSSMAProvision(sstt.porcentajeSSMAProvision ?? quote.porcentajeSSMAProvision ?? 5);
     setLogisticsOverrides(sstt.logisticsOverrides ?? quote.logisticsOverrides ?? { enabled: false });
 
     // Restaurar el ID para que el próximo guardado haga UPDATE, no INSERT
@@ -215,6 +233,8 @@ export default function EPCDashboard() {
     setDiasPermitidosCorte(3);
     setCondicionTrabajo(1.0);
     setAplicarGastosIndirectos(true);
+    setAplicarSSMAProvision(true);
+    setPorcentajeSSMAProvision(5);
     setLogisticsOverrides({ enabled: false });
     setTotalProcura(0);
     setTotalServicios(0);
@@ -613,6 +633,10 @@ export default function EPCDashboard() {
                   setCondicionTrabajo={setCondicionTrabajo}
                   aplicarGastosIndirectos={aplicarGastosIndirectos}
                   setAplicarGastosIndirectos={setAplicarGastosIndirectos}
+                  aplicarSSMAProvision={aplicarSSMAProvision}
+                  setAplicarSSMAProvision={setAplicarSSMAProvision}
+                  porcentajeSSMAProvision={porcentajeSSMAProvision}
+                  setPorcentajeSSMAProvision={setPorcentajeSSMAProvision}
                   logisticsOverrides={logisticsOverrides}
                   setLogisticsOverrides={setLogisticsOverrides}
                   setTotalServicios={setTotalServicios} 

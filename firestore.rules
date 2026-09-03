@@ -1,0 +1,56 @@
+﻿rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // COTIZACIONES V2 — Acceso restringido al propietario
+    // Cada cotización tiene un campo `userId` con el UID del creador.
+    // Un usuario solo puede leer y modificar SUS PROPIAS cotizaciones.
+    // =========================================================================
+    match /cotizaciones_v2/{docId} {
+      // Lectura: solo el propietario
+      allow read: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+
+      // Creación: el userId del documento debe coincidir con el UID del usuario
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid;
+
+      // Actualización: solo el propietario, y no puede cambiar el userId
+      allow update: if request.auth != null
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
+
+      // Eliminación: solo el propietario
+      allow delete: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // =========================================================================
+    // COTIZACIONES EMITIDAS — Colección legacy (solo lectura para propietarios)
+    // Mantener para no romper acceso a historial anterior.
+    // =========================================================================
+    match /cotizaciones_emitidas/{docId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // =========================================================================
+    // EQUIPOS MAESTROS — Catálogo compartido de solo lectura
+    // Cualquier usuario autenticado puede leer.
+    // Cualquier usuario autenticado puede agregar (para el flujo ad-hoc).
+    // Solo admins deberían poder eliminar (implementar con Custom Claims si se requiere).
+    // =========================================================================
+    match /equipos_maestros/{docId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null; // Restringir a admins en el futuro
+    }
+
+    // =========================================================================
+    // DENY ALL — Cualquier otra colección está bloqueada por defecto
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
