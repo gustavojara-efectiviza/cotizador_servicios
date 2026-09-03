@@ -31,11 +31,29 @@ export default function AppWrapper() {
         position: 'sticky',
         top: 0
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ background: '#3b82f6', width: '8px', height: '8px', borderRadius: '50%' }}></div>
-          <span style={{ fontSize: '0.85rem', fontWeight: 700, letterSpacing: '0.05em', color: '#94a3b8' }}>
-            ZUNZ COTIZADOR MULTI-VERSION
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ 
+            background: '#ffffff', 
+            padding: '3px 10px', 
+            borderRadius: '6px', 
+            display: 'flex', 
+            alignItems: 'center',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+          }}>
+            <img 
+              src="/logo-beigel.png" 
+              alt="Beigel" 
+              style={{ height: '28px', width: 'auto', display: 'block', objectFit: 'contain' }} 
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', lineHeight: 1.1 }}>
+            <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#ffffff', letterSpacing: '0.02em' }}>
+              Cotizador
+            </span>
+            <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#94a3b8', letterSpacing: '0.06em' }}>
+              by Efectiviza
+            </span>
+          </div>
         </div>
 
         <div style={{ display: 'flex', background: '#1e293b', borderRadius: '25px', padding: '3px', border: '1px solid #334155' }}>
