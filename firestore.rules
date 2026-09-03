@@ -1,29 +1,13 @@
-﻿rules_version = '2';
+rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // =========================================================================
-    // COTIZACIONES V2 — Acceso restringido al propietario
-    // Cada cotización tiene un campo `userId` con el UID del creador.
-    // Un usuario solo puede leer y modificar SUS PROPIAS cotizaciones.
+    // COTIZACIONES V2 — Acceso para usuarios autenticados
+    // Permite consultar cotizaciones históricas y nuevas creadas por el equipo.
     // =========================================================================
     match /cotizaciones_v2/{docId} {
-      // Lectura: solo el propietario
-      allow read: if request.auth != null
-        && resource.data.userId == request.auth.uid;
-
-      // Creación: el userId del documento debe coincidir con el UID del usuario
-      allow create: if request.auth != null
-        && request.resource.data.userId == request.auth.uid;
-
-      // Actualización: solo el propietario, y no puede cambiar el userId
-      allow update: if request.auth != null
-        && resource.data.userId == request.auth.uid
-        && request.resource.data.userId == request.auth.uid;
-
-      // Eliminación: solo el propietario
-      allow delete: if request.auth != null
-        && resource.data.userId == request.auth.uid;
+      allow read, write: if request.auth != null;
     }
 
     // =========================================================================

@@ -334,17 +334,28 @@ function App() {
   const resultadosCalculados = calcularCotizacionActiva({ ...cotizacionGlobal, equiposCotizados: structuredClone(cart), alquileres: structuredClone(alquileres) });
 
   const handleLoadCotizacion = (quote) => {
-    setCart(quote.equiposCotizados || []);
-    setAlquileres(quote.alquileres || []);
-    setDistanciaKm(quote.distanciaKm || quote.Distancia_Ida_Vuelta_km || 100);
-    setDiasPermitidosCorte(quote.diasPermitidosCorte || quote.Dias_Permitidos_Corte || 3);
-    setGastosImprevistos(quote.Gastos_Imprevistos || 0);
-    setMargenImprevistosPorcentaje(quote.Margen_Imprevistos_Porcentaje || 0);
-    setAplicarGastosIndirectos(quote.aplicarGastosIndirectos !== undefined ? quote.aplicarGastosIndirectos : true);
-    setLogisticsOverrides(quote.logisticsOverrides || { enabled: false });
+    const sstt = quote.serviciosSST || {};
+    const dg = quote.datosGenerales || {};
+
+    const items = quote.equiposCotizados || sstt.cart || quote.cart || quote.detalleServicios || [];
+    setCart(items);
+
+    const alqs = quote.alquileres || sstt.alquileres || [];
+    setAlquileres(alqs);
+
+    setDistanciaKm(quote.distanciaKm || quote.Distancia_Ida_Vuelta_km || sstt.distanciaKm || 100);
+    setDiasPermitidosCorte(quote.diasPermitidosCorte || quote.Dias_Permitidos_Corte || sstt.diasPermitidosCorte || 3);
+    setGastosImprevistos(quote.Gastos_Imprevistos || sstt.gastosImprevistos || 0);
+    setMargenImprevistosPorcentaje(quote.Margen_Imprevistos_Porcentaje || sstt.margenImprevistosPorcentaje || 0);
+    setAplicarGastosIndirectos(
+      quote.aplicarGastosIndirectos !== undefined 
+        ? quote.aplicarGastosIndirectos 
+        : (sstt.aplicarGastosIndirectos !== undefined ? sstt.aplicarGastosIndirectos : true)
+    );
+    setLogisticsOverrides(quote.logisticsOverrides || sstt.logisticsOverrides || { enabled: false });
     
-    setCliente(quote.Cliente || '');
-    setNombreObra(quote.NombreObra || '');
+    setCliente(dg.nombreCliente || quote.Cliente || quote.cliente || '');
+    setNombreObra(dg.nombreProyecto || quote.NombreObra || quote.nombreProyecto || '');
     setIsDirty(false);
   };
 

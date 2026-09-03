@@ -1,4 +1,4 @@
-﻿import { collection, getDocs, addDoc, doc, setDoc, serverTimestamp, query, where, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, setDoc, serverTimestamp, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { auth } from '../firebase';
 
@@ -108,53 +108,64 @@ const cleanUndefined = (obj) => {
 };
 
 // =============================================================================
-// P3: Obtener cotizaciones filtradas por usuario (query con where + limit)
-// - Requiere Ã­ndice compuesto en Firebase Console:
-//   Collection: cotizaciones_v2 | Fields: userId ASC, fecha_actualizacion DESC
-// - Fallback a query sin filtro si el usuario no tiene UID (no deberÃ­a ocurrir)
+// P3: Obtener cotizaciones consolidadas (cotizaciones_v2 + cotizaciones_emitidas)
+// - Carga en paralelo y fusiona ambas colecciones con tolerancia total a fallos.
+// - Ordena en memoria por fecha más reciente sin requerir índices compuestos estrictos
 // =============================================================================
-export const fetchCotizacionesV2 = async (userId = null) => {
+export const fetchCotizacionesV2 = async () => {
   try {
-    const col = collection(db, 'cotizaciones_v2');
-    const uid = userId || auth.currentUser?.uid;
+    const colV2 = collection(db, 'cotizaciones_v2');
+    const colLegacy = collection(db, 'cotizaciones_emitidas');
 
-    let q;
-    if (uid) {
-      // Query filtrada por usuario â€” O(usuario) en vez de O(colecciÃ³n total)
-      q = query(
-        col,
-        where('userId', '==', uid),
-        orderBy('fecha_actualizacion', 'desc'),
-        limit(100)
+    const [snapshotV2, snapshotLegacy] = await Promise.allSettled([
+      getDocs(colV2),
+      getDocs(colLegacy)
+    ]);
+
+    const listV2 = snapshotV2.status === 'fulfilled' 
+      ? snapshotV2.value.docs.map(d => ({ id: d.id, _source: 'v2', ...d.data() }))
+      : [];
+
+    const listLegacy = snapshotLegacy.status === 'fulfilled'
+      ? snapshotLegacy.value.docs.map(d => ({ id: d.id, _source: 'legacy', ...d.data() }))
+      : [];
+
+    const combinedMap = new Map();
+    // Primero legacy, luego v2 para que si coinciden ids, v2 sobreescriba
+    listLegacy.forEach(item => combinedMap.set(item.id, item));
+    listV2.forEach(item => combinedMap.set(item.id, item));
+
+    const combined = Array.from(combinedMap.values());
+
+    const getMillis = (dateVal) => {
+      if (!dateVal) return 0;
+      if (typeof dateVal.toMillis === 'function') return dateVal.toMillis();
+      if (typeof dateVal.toDate === 'function') return dateVal.toDate().getTime();
+      if (typeof dateVal.seconds === 'number') return dateVal.seconds * 1000;
+      if (typeof dateVal === 'string' || typeof dateVal === 'number') {
+        const parsed = new Date(dateVal).getTime();
+        return isNaN(parsed) ? 0 : parsed;
+      }
+      return 0;
+    };
+
+    return combined.sort((a, b) => {
+      const timeA = Math.max(
+        getMillis(a.fecha_actualizacion), 
+        getMillis(a.fecha_creacion), 
+        getMillis(a.fecha),
+        getMillis(a.timestamp)
       );
-    } else {
-      // Fallback defensivo: sin filtro, ordenar en cliente
-      console.warn('fetchCotizacionesV2: no se encontrÃ³ userId, cargando sin filtro.');
-      const snapshot = await getDocs(col);
-      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      return list.sort((a, b) => {
-        const dateA = a.fecha_actualizacion?.toMillis?.() || a.fecha_creacion?.toMillis?.() || 0;
-        const dateB = b.fecha_actualizacion?.toMillis?.() || b.fecha_creacion?.toMillis?.() || 0;
-        return dateB - dateA;
-      });
-    }
-
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const timeB = Math.max(
+        getMillis(b.fecha_actualizacion), 
+        getMillis(b.fecha_creacion), 
+        getMillis(b.fecha),
+        getMillis(b.timestamp)
+      );
+      return timeB - timeA;
+    });
   } catch (error) {
-    // Si falla el Ã­ndice compuesto (aÃºn no creado en Firebase), degradar a fetch simple
-    if (error.code === 'failed-precondition') {
-      console.warn('fetchCotizacionesV2: Ã­ndice compuesto no disponible. Cargando sin filtro hasta que se cree el Ã­ndice.');
-      const col = collection(db, 'cotizaciones_v2');
-      const snapshot = await getDocs(col);
-      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      return list.sort((a, b) => {
-        const dateA = a.fecha_actualizacion?.toMillis?.() || a.fecha_creacion?.toMillis?.() || 0;
-        const dateB = b.fecha_actualizacion?.toMillis?.() || b.fecha_creacion?.toMillis?.() || 0;
-        return dateB - dateA;
-      });
-    }
-    console.error('Error obteniendo cotizaciones_v2:', error);
+    console.error('Error obteniendo cotizaciones consolidadas:', error);
     return [];
   }
 };
