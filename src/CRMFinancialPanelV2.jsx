@@ -386,6 +386,13 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
               </div>
             )}
 
+            {(resultados.Ganancia_Alquileres || 0) > 0 && (
+              <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                <span style={{ color: '#0284c7' }}>Ganancia Servicios de Apoyo y Alquileres:</span>
+                <span style={{ color: '#10b981', fontWeight: 'bold' }}>+{formatGs(resultados.Ganancia_Alquileres)}</span>
+              </div>
+            )}
+
             {resultados.Precio_Mercado_Total_Trafos > 0 && (
               <div style={{ background: '#ecfdf5', color: '#059669', padding: '10px', borderRadius: '4px', marginBottom: '10px', border: '1px solid #10b981' }}>
                 <strong>Estrategia Top-Down Activa:</strong> Precios fijados por valor de mercado.
