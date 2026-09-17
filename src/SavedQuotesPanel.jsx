@@ -114,13 +114,16 @@ export default function SavedQuotesPanel({ isOpen, onClose, onLoadQuote }) {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <strong style={{ fontSize: '1.05rem', color: '#2563eb' }}>
-                    {quote.datosGenerales?.nombreCliente || quote.Cliente || 'Proyecto sin nombre'}
+                    {quote.datosGenerales?.nombreCliente || quote.Cliente || `Borrador (${quote.id?.slice(0, 8)}...)`}
                   </strong>
-                  <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{formatDate(quote.fecha_actualizacion || quote.fecha_creacion)}</span>
+                  <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{formatDate(quote.fecha_actualizacion || quote.fecha_creacion || quote.tipoCambioSnapshot?.fechaSnapshot)}</span>
                 </div>
                 <div style={{ fontSize: '0.88rem', color: '#475569', marginBottom: '5px' }}>
                   <FileText size={14} style={{ display: 'inline', marginRight: '5px', verticalAlign: 'text-bottom' }}/>
                   {quote.datosGenerales?.nombreProyecto || quote.NombreObra || 'Sin descripción'}
+                  <span style={{ marginLeft: '8px', fontSize: '0.72rem', color: '#64748b', background: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>
+                    ID: {quote.id?.slice(0, 8)}
+                  </span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
                   <div style={{ background: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 700 }}>
