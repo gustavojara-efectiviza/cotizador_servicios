@@ -26,7 +26,8 @@ import {
   Truck, 
   Boxes,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Copy
 } from 'lucide-react';
 
 export default function EPCDashboard() {
@@ -179,6 +180,68 @@ export default function EPCDashboard() {
     }
   };
 
+  const guardarComoCopia = async () => {
+    if (!nombreCliente.trim() || !nombreProyecto.trim()) {
+      showToast('Por favor, ingresa el Cliente y Nombre del Proyecto en el Bloque 0.', 'error');
+      return;
+    }
+    if (!tipoCambioVenta || Number(tipoCambioVenta) <= 0) {
+      showToast('El tipo de cambio USD/PYG no puede ser 0. Verificá el Bloque 0 antes de guardar.', 'error');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const dataToSave = {
+        datosGenerales: {
+          nombreCliente,
+          nombreProyecto,
+          monedaTrabajo,
+          tipoCambioCompra,
+          tipoCambioVenta
+        },
+        detalleProcura: equiposProcura,
+        detalleServicios,
+        serviciosSST: {
+          cart: cartServicios,
+          alquileres: alquileresServicios,
+          distanciaKm,
+          diasPermitidosCorte,
+          gastosImprevistos,
+          margenImprevistosPorcentaje,
+          condicionTrabajo,
+          aplicarGastosIndirectos,
+          aplicarSSMAProvision,
+          porcentajeSSMAProvision,
+          logisticsOverrides
+        },
+        totales: {
+          totalProcura,
+          totalServicios,
+          granTotalGs: (totalProcura * tipoCambioVenta) + totalServicios,
+          granTotalUSD: totalProcura + (totalServicios / tipoCambioVenta)
+        },
+        tipoCambioSnapshot: {
+          compra: tipoCambioCompra,
+          venta: tipoCambioVenta,
+          fechaSnapshot: new Date().toISOString()
+        }
+      };
+
+      // Al enviar null como ID a upsertCotizacionV2, se crea un documento NUEVO en Firestore
+      const newId = await upsertCotizacionV2(null, dataToSave);
+      setCotizacionId(newId);
+      showToast(`¡Guardada como nueva copia independiente! (ID: ${newId.slice(0, 8)}...)`, 'success');
+      if (copilotRef.current) {
+        copilotRef.current.celebrarExito('¡Copia duplicada y guardada exitosamente!');
+      }
+    } catch (error) {
+      console.error(error);
+      showToast('Error al intentar guardar la copia.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // FASE 3: REHIDRATACIÓN COMPLETA — Inyecta una cotización guardada en todos los estados centralizados
   const handleLoadCotizacionV2 = (quote) => {
     // --- Datos Generales (Bloque 0) ---
@@ -324,15 +387,15 @@ export default function EPCDashboard() {
               </select>
             </div>
 
-            {/* Botón Guardar global persistente (Fast Save) */}
+            {/* Botón Guardar / Actualizar */}
             <button
               onClick={guardarCotizacionMaestra}
               disabled={isSaving}
               style={{
                 border: 'none',
-                background: isSaving ? '#94a3b8' : '#10b981',
+                background: isSaving ? '#94a3b8' : (cotizacionId ? '#2563eb' : '#10b981'),
                 color: '#ffffff',
-                padding: '10px 20px',
+                padding: '10px 18px',
                 borderRadius: '8px',
                 fontWeight: 800,
                 fontSize: '0.9rem',
@@ -340,15 +403,44 @@ export default function EPCDashboard() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                boxShadow: isSaving ? 'none' : '0 4px 14px rgba(16,185,129,0.4)',
+                boxShadow: isSaving ? 'none' : (cotizacionId ? '0 4px 14px rgba(37,99,235,0.35)' : '0 4px 14px rgba(16,185,129,0.4)'),
                 transition: 'all 0.2s',
                 transform: isSaving ? 'scale(0.98)' : 'scale(1)'
               }}
+              title={cotizacionId ? 'Actualizar esta oferta existente en la base de datos' : 'Guardar cotización'}
               onMouseEnter={e => !isSaving && (e.currentTarget.style.transform = 'scale(1.02)')}
               onMouseLeave={e => !isSaving && (e.currentTarget.style.transform = 'scale(1)')}
             >
-              💾 {isSaving ? 'Guardando...' : 'Guardar Cotización'}
+              💾 {isSaving ? 'Guardando...' : (cotizacionId ? 'Actualizar Oferta' : 'Guardar Cotización')}
             </button>
+
+            {/* Botón Guardar como Copia (permite crear oferta2 sin tocar oferta1) */}
+            {cotizacionId && (
+              <button
+                onClick={guardarComoCopia}
+                disabled={isSaving}
+                style={{
+                  border: '1px solid #10b981',
+                  background: isSaving ? '#f1f5f9' : '#ecfdf5',
+                  color: '#059669',
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  fontWeight: 800,
+                  fontSize: '0.9rem',
+                  cursor: isSaving ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 8px rgba(16,185,129,0.15)'
+                }}
+                title="Crea una nueva oferta independiente sin sobreescribir la original"
+                onMouseEnter={e => !isSaving && (e.currentTarget.style.transform = 'scale(1.02)')}
+                onMouseLeave={e => !isSaving && (e.currentTarget.style.transform = 'scale(1)')}
+              >
+                <Copy size={16} /> Guardar como Copia
+              </button>
+            )}
 
             {/* Botón Nueva Cotización */}
             <button

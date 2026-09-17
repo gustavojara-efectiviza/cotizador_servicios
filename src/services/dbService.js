@@ -122,13 +122,28 @@ export const fetchCotizacionesV2 = async () => {
       getDocs(colLegacy)
     ]);
 
-    const listV2 = snapshotV2.status === 'fulfilled' 
-      ? snapshotV2.value.docs.map(d => ({ id: d.id, _source: 'v2', ...d.data() }))
-      : [];
+        let listV2 = [];
+    if (snapshotV2.status === 'fulfilled') {
+      listV2 = snapshotV2.value.docs.map(d => ({ id: d.id, _source: 'v2', ...d.data() }));
+    } else {
+      console.warn('fetchCotizacionesV2: consulta general no autorizada, intentando fallback por usuario...');
+      const uid = auth.currentUser?.uid;
+      if (uid) {
+        try {
+          const qUser = query(colV2, where('userId', '==', uid));
+          const snapUser = await getDocs(qUser);
+          listV2 = snapUser.docs.map(d => ({ id: d.id, _source: 'v2', ...d.data() }));
+          console.log(`fetchCotizacionesV2: fallback por userId exitoso (${listV2.length} cotizaciones encontradas)`);
+        } catch (errUser) {
+          console.error('fetchCotizacionesV2: error en fallback por userId:', errUser);
+        }
+      }
+    }
 
-    const listLegacy = snapshotLegacy.status === 'fulfilled'
-      ? snapshotLegacy.value.docs.map(d => ({ id: d.id, _source: 'legacy', ...d.data() }))
-      : [];
+    let listLegacy = [];
+    if (snapshotLegacy.status === 'fulfilled') {
+      listLegacy = snapshotLegacy.value.docs.map(d => ({ id: d.id, _source: 'legacy', ...d.data() }));
+    }
 
     const combinedMap = new Map();
     // Primero legacy, luego v2 para que si coinciden ids, v2 sobreescriba
@@ -154,13 +169,15 @@ export const fetchCotizacionesV2 = async () => {
         getMillis(a.fecha_actualizacion), 
         getMillis(a.fecha_creacion), 
         getMillis(a.fecha),
-        getMillis(a.timestamp)
+        getMillis(a.timestamp),
+        getMillis(a.tipoCambioSnapshot?.fechaSnapshot)
       );
       const timeB = Math.max(
         getMillis(b.fecha_actualizacion), 
         getMillis(b.fecha_creacion), 
         getMillis(b.fecha),
-        getMillis(b.timestamp)
+        getMillis(b.timestamp),
+        getMillis(b.tipoCambioSnapshot?.fechaSnapshot)
       );
       return timeB - timeA;
     });
