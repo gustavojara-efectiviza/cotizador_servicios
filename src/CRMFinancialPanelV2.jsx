@@ -172,7 +172,7 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
     // --- HOJA 3: LOGÍSTICA Y ALQUILERES ---
     const rowsLogistica = [];
     rowsLogistica.push(["Alquileres Especiales"]);
-    rowsLogistica.push(["Descripción", "Cantidad", "Costo Directo", "Margen %", "Precio Venta Unitario", "Precio Venta Total"]);
+    rowsLogistica.push(["Descripción", "Cantidad", "Costo Directo Unitario", "Margen s/Venta %", "Utilidad Neta Unitaria", "Precio Venta Unitario", "Precio Venta Total"]);
     
     if (alquileresExcel.length === 0) {
       rowsLogistica.push(["Sin alquileres especiales", "-", "-", "-", "-", "-"]);
@@ -183,11 +183,12 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
         const margenReal = precioUnitario > 0 ? (utilUnitaria / precioUnitario) * 100 : 0;
         rowsLogistica.push([
           alq.descripcion,
-          1,
+          alq.cantidad || 1,
           formatNumber(alq.costo_directo_unitario || 0),
           formatPercent(margenReal),
+          formatNumber(utilUnitaria),
           formatNumber(precioUnitario),
-          formatNumber(precioUnitario)
+          formatNumber(precioUnitario * (alq.cantidad || 1))
         ]);
       });
     }
@@ -473,6 +474,24 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
                 • Huella Logística: {resultados.Cantidad_Vehiculos} Vehículos
               </div>
               
+              {alquileres && alquileres.length > 0 && (
+                <div style={{ marginBottom: '15px' }}>
+                  <strong style={{ color: '#0284c7', display: 'block', marginBottom: '5px' }}>[SERVICIOS DE APOYO Y ALQUILERES]</strong>
+                  {alquileres.map(alq => {
+                    const mPct = Math.min(99, Math.max(0, alq.margen ?? 30));
+                    const mDec = mPct / 100;
+                    const pv = mDec < 1 ? Math.round(alq.costo / (1 - mDec)) : alq.costo;
+                    return (
+                      <div key={alq.id} style={{ display: 'flex', gap: '8px', justifyContent: 'space-between', fontSize: '0.82rem', borderBottom: '1px dashed #e2e8f0', paddingBottom: '3px', marginBottom: '3px' }}>
+                        <span style={{ color: 'var(--text-primary)', flex: 2 }}>{alq.descripcion || '(sin nombre)'}</span>
+                        <span style={{ color: '#64748b' }}>{formatGs(alq.costo)}</span>
+                        <span style={{ color: '#0284c7', fontWeight: 700 }}>{mPct.toFixed(0)}%</span>
+                        <span style={{ color: '#059669', fontWeight: 700 }}>{formatGs(pv)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <div style={{ marginBottom: '5px' }}>
                 <strong style={{ color: 'var(--accent)', display: 'block', marginBottom: '5px' }}>[ESTRATEGIA COMERCIAL Y COBERTURA]</strong>
                 • Fondo de Imprevistos: {formatGs(resultados.Gastos_Imprevistos)}<br/>

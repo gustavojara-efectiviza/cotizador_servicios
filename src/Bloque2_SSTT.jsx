@@ -569,7 +569,7 @@ function Bloque2_SSTT({
   };
 
   const addAlquiler = () => {
-    setAlquileres([...alquileres, { id: crypto.randomUUID(), descripcion: '', costo: 0 }]);
+    setAlquileres([...alquileres, { id: crypto.randomUUID(), descripcion: '', costo: 0, margen: 30 }]);
     setIsDirty(true);
   };
 
@@ -1917,16 +1917,50 @@ function Bloque2_SSTT({
             {/* Alquileres Especiales (Siempre accesibles como partida independiente) */}
             <div style={{ marginTop: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '15px' }}>
               <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', color: 'var(--text-primary)' }}>Servicios de Apoyo y Alquileres (Grúas, Fletes)</label>
-              {alquileres.map((alq) => (
-                <div key={alq.id} style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                  <input type="text" placeholder="Descripción" value={alq.descripcion} onChange={e => updateAlquiler(alq.id, 'descripcion', e.target.value)} style={{ flex: 2 }} />
-                  <input type="number" placeholder="Costo (Gs)" value={alq.costo} onChange={e => updateAlquiler(alq.id, 'costo', parseFloat(e.target.value) || 0)} style={{ flex: 1 }} />
-                  <button className="remove-btn" onClick={() => removeAlquiler(alq.id)}><Trash2 size={18}/></button>
-                </div>
-              ))}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
+              {alquileres.map((alq) => {
+                const margenDecimal = Math.min(0.99, Math.max(0, (alq.margen ?? 30) / 100));
+                const precioEstimado = margenDecimal < 1 ? (alq.costo / (1 - margenDecimal)) : alq.costo;
+                const margenSVenta = precioEstimado > 0 ? ((1 - alq.costo / precioEstimado) * 100) : 0;
+                return (
+                  <div key={alq.id} style={{ marginBottom: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px' }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <input type="text" placeholder="Descripción (ej: Grúa, Flete, Andamio)" value={alq.descripcion} onChange={e => updateAlquiler(alq.id, 'descripcion', e.target.value)} style={{ flex: '2 1 180px', minWidth: '140px' }} />
+                      <input type="number" placeholder="Costo (Gs)" value={alq.costo} onChange={e => updateAlquiler(alq.id, 'costo', parseFloat(e.target.value) || 0)} style={{ flex: '1 1 120px', minWidth: '100px' }} />
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '80px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <input
+                            type="number"
+                            min="0"
+                            max="99"
+                            placeholder="30"
+                            value={alq.margen ?? 30}
+                            onChange={e => updateAlquiler(alq.id, 'margen', parseFloat(e.target.value) || 0)}
+                            style={{ width: '64px', textAlign: 'center', borderColor: '#0284c7', fontWeight: 'bold' }}
+                            title="Margen sobre precio de venta (%)"
+                          />
+                          <span style={{ fontSize: '0.8rem', color: '#0284c7', fontWeight: 700 }}>%</span>
+                        </div>
+                        <span style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '2px', whiteSpace: 'nowrap' }}>Margen s/Venta</span>
+                      </div>
+                      <button className="remove-btn" onClick={() => removeAlquiler(alq.id)} style={{ flexShrink: 0 }}><Trash2 size={18}/></button>
+                    </div>
+                    {alq.costo > 0 && (
+                      <div style={{ display: 'flex', gap: '16px', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #e2e8f0', fontSize: '0.78rem', color: '#64748b' }}>
+                        <span>Costo: <strong style={{ color: '#1e293b' }}>{formatGs(alq.costo)}</strong></span>
+                        <span style={{ color: '#0284c7' }}>P. Venta estimado: <strong style={{ color: '#0369a1', fontSize: '0.85rem' }}>{formatGs(Math.round(precioEstimado))}</strong></span>
+                        <span style={{ color: '#10b981' }}>Ganancia: <strong>+{formatGs(Math.round(precioEstimado - alq.costo))}</strong></span>
+                        <span style={{ background: '#e0f2fe', color: '#0284c7', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>{margenSVenta.toFixed(1)}% margen</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', flexWrap: 'wrap', gap: '8px' }}>
                 <button className="primary-btn" onClick={addAlquiler} style={{ width: 'auto', padding: '6px 12px', background: '#64748b' }}><Plus size={16} /> Agregar</button>
-                <span style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>Total: {formatGs(alquileres.reduce((sum, a) => sum + a.costo, 0))}</span>
+                <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Costo total: <strong style={{ color: 'var(--text-primary)' }}>{formatGs(alquileres.reduce((sum, a) => sum + (a.costo || 0), 0))}</strong></span>
+                  <span style={{ color: '#0284c7' }}>P. Venta total: <strong style={{ color: '#0369a1' }}>{formatGs(alquileres.reduce((sum, a) => { const md = Math.min(0.99, Math.max(0, (a.margen ?? 30) / 100)); return sum + (md < 1 ? (a.costo / (1 - md)) : a.costo); }, 0))}</strong></span>
+                </div>
               </div>
             </div>
 
