@@ -161,6 +161,9 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
         formatNumber(item.costoServiceFee || 0),
         formatNumber(item.costoAmortizacion || 0),
         formatNumber(item.costo_directo_unitario || 0),
+        formatNumber(item.precio_servicio_unitario || 0),
+        formatNumber(item.cuota_logistica_unitaria || 0),
+        formatNumber(item.cuota_admin_unitaria || 0),
         formatNumber(utilUnitaria),
         formatPercent(margenReal),
         formatNumber(precioUnitario),
@@ -171,7 +174,55 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
 
     // --- HOJA 3: LOGÍSTICA Y ALQUILERES ---
     const rowsLogistica = [];
-    rowsLogistica.push(["Alquileres Especiales"]);
+
+    // === SECCIÓN A: CÁLCULO BASE DE LOGÍSTICA ===
+    rowsLogistica.push(["SECCIÓN A: CÁLCULO BASE DE LOGÍSTICA Y MOVILIZACIÓN"]);
+    rowsLogistica.push([]);
+    rowsLogistica.push(["Concepto", "Valor"]);
+    rowsLogistica.push(["Personal Simultáneo", resultados.Personal_Simultaneo || 0]);
+    rowsLogistica.push(["Días Reales de Obra", resultados.Dias_Reales_Obra || 0]);
+    rowsLogistica.push(["Viáticos (días × pers × tarifa)", resultados.Costo_Viaticos_Total || 0]);
+    rowsLogistica.push(["Hospedaje (noches × pers × tarifa)", resultados.Costo_Hospedaje_Total || 0]);
+    rowsLogistica.push(["Movilidad (vehículos × viaje)", resultados.Costo_Movilidad_Total || 0]);
+    rowsLogistica.push([]);
+    rowsLogistica.push(["TOTAL LOGÍSTICA (costo)", resultados.Logistica_Global_Total || 0]);
+    rowsLogistica.push(["Margen Logística (30%)", resultados.Ganancia_Logistica || 0]);
+    rowsLogistica.push(["PRECIO VENTA LOGÍSTICA", resultados.PV_Logistica_Total || (resultados.Precio_Venta_Logistica || 0)]);
+    rowsLogistica.push([]);
+
+    // === SECCIÓN B: DISTRIBUCIÓN POR ÍTEM ===
+    rowsLogistica.push(["SECCIÓN B: DISTRIBUCIÓN DE LOGÍSTICA POR ÍTEM DE SERVICIO"]);
+    rowsLogistica.push([]);
+    const tablaPool = resultados.Pool_Logistica_Tabla || [];
+    if (tablaPool.length === 0) {
+      rowsLogistica.push(["Sin ítems en el pool de prorrateo", "", "", "", "", "", ""]);
+    } else {
+      rowsLogistica.push(["Ítem de Servicio", "Qty", "Base MO ($)", "Peso (%)", "Cuota Log. Costo", "Cuota Log. P.Venta", "Ganancia Log."]);
+      let totalMO = 0, totalCuotaCosto = 0, totalCuotaPV = 0, totalGanLog = 0;
+      tablaPool.forEach(row => {
+        totalMO += row.MO_base || 0;
+        totalCuotaCosto += row.cuota_log_costo || 0;
+        totalCuotaPV += row.cuota_log_pv || 0;
+        totalGanLog += row.ganancia_log_item || 0;
+        rowsLogistica.push([
+          row.equipo, row.qty || 1,
+          formatNumber(row.MO_base || 0), formatPercent(row.peso_pct || 0),
+          formatNumber(row.cuota_log_costo || 0), formatNumber(row.cuota_log_pv || 0),
+          formatNumber(row.ganancia_log_item || 0),
+        ]);
+      });
+      rowsLogistica.push(["TOTAL", "", formatNumber(totalMO), "100%", formatNumber(totalCuotaCosto), formatNumber(totalCuotaPV), formatNumber(totalGanLog)]);
+    }
+    rowsLogistica.push([]);
+
+    // === GASTOS ADMINISTRATIVOS Y FINANCIEROS ===
+    rowsLogistica.push(["GASTOS ADMINISTRATIVOS Y FINANCIEROS"]);
+    rowsLogistica.push(["Porcentaje configurado", formatPercent(resultados.gastosAdminFinancieroPct || 6)]);
+    rowsLogistica.push(["Total en precio de venta", formatNumber(resultados.Gastos_Admin_Financiero_Total || resultados.Gastos_Administrativos || 0)]);
+    rowsLogistica.push([]);
+
+    // === ALQUILERES ESPECIALES ===
+    rowsLogistica.push(["ALQUILERES ESPECIALES Y SERVICIOS DE APOYO"]);
     rowsLogistica.push(["Descripción", "Cantidad", "Costo Directo Unitario", "Margen s/Venta %", "Utilidad Neta Unitaria", "Precio Venta Unitario", "Precio Venta Total"]);
     
     if (alquileresExcel.length === 0) {
@@ -210,8 +261,8 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
 
     // Ajustar anchos
     wsResumen['!cols'] = [{wch: 50}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}];
-    wsEquipos['!cols'] = [{wch: 35}, {wch: 15}, {wch: 10}, {wch: 22}, {wch: 20}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 12}, {wch: 20}, {wch: 22}];
-    wsLogistica['!cols'] = [{wch: 40}, {wch: 10}, {wch: 15}, {wch: 12}, {wch: 20}, {wch: 20}];
+    wsEquipos['!cols'] = [{wch: 35}, {wch: 15}, {wch: 10}, {wch: 22}, {wch: 20}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 20}, {wch: 20}, {wch: 12}, {wch: 20}, {wch: 22}];
+    wsLogistica['!cols'] = [{wch: 45}, {wch: 10}, {wch: 18}, {wch: 12}, {wch: 18}, {wch: 20}, {wch: 20}];
 
     XLSX.utils.book_append_sheet(workbook, wsResumen, "Resumen Ejecutivo");
     XLSX.utils.book_append_sheet(workbook, wsEquipos, "Detalle de Equipos");
@@ -349,7 +400,7 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
             <h3 className="no-print" style={{ color: '#059669', fontSize: '1rem', marginBottom: '10px' }}>Rentabilidad y Margen</h3>
 
             <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              <span>Gastos Administrativos (3%):</span>
+              <span>Gastos Adm. y Financieros ({(resultados.gastosAdminFinancieroPct ?? 6).toFixed(0)}% s/venta):</span>
               <span style={{ color: 'var(--text-primary)' }}>{formatGs(resultados.Gastos_Administrativos)}</span>
             </div>
             {resultados.Ganancia_Tecnologia_Total > 0 && (
@@ -467,6 +518,36 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
                 • Margen Real Neto: <strong style={{ color: '#059669' }}>{margenRealUI.toFixed(2)}%</strong>
               </div>
               
+              {resultados.Pool_Logistica_Tabla && resultados.Pool_Logistica_Tabla.length > 0 && (
+                <div style={{ marginBottom: '15px' }}>
+                  <strong style={{ color: '#0284c7', display: 'block', marginBottom: '5px' }}>[DISTRIBUCIÓN DE LOGÍSTICA]</strong>
+                  <div style={{ fontSize: '0.78rem', overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.77rem' }}>
+                      <thead>
+                        <tr style={{ background: '#e0f2fe', color: '#0369a1' }}>
+                          <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 600 }}>Ítem</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 600 }}>Peso</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 600 }}>Cuota Costo</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 600 }}>Cuota P.Venta</th>
+                          <th style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 600 }}>Ganancia</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {resultados.Pool_Logistica_Tabla.map((row, idx) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                            <td style={{ padding: '3px 6px', color: 'var(--text-primary)', fontSize: '0.75rem', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.equipo}</td>
+                            <td style={{ padding: '3px 6px', textAlign: 'right', color: '#0284c7', fontWeight: 600 }}>{(row.peso_pct || 0).toFixed(1)}%</td>
+                            <td style={{ padding: '3px 6px', textAlign: 'right', color: '#64748b' }}>{formatGs(Math.round(row.cuota_log_costo || 0))}</td>
+                            <td style={{ padding: '3px 6px', textAlign: 'right', color: '#1e293b', fontWeight: 600 }}>{formatGs(Math.round(row.cuota_log_pv || 0))}</td>
+                            <td style={{ padding: '3px 6px', textAlign: 'right', color: '#059669', fontWeight: 600 }}>+{formatGs(Math.round(row.ganancia_log_item || 0))}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               <div style={{ marginBottom: '15px' }}>
                 <strong style={{ color: 'var(--accent)', display: 'block', marginBottom: '5px' }}>[RIESGO OPERATIVO EN CAMPO]</strong>
                 • Ventana de Trabajo: {resultados.Dias_Permitidos_Corte} días<br/>
