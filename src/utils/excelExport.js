@@ -920,15 +920,15 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
     rowLogTitle.getCell(2).font = blackFontBold;
     
     sheet3.addRow(['', 'Concepto', 'Valor']);
-    const poolLog = cotizacionData.poolLogistica || [];
-    const logTotal = cotizacionData.logisticaGlobal || 0;
-    const logPV = cotizacionData.precioVentaLogistica || (logTotal / 0.7);
+    const poolLog = estadoGlobal.poolLogistica || [];
+    const logTotal = estadoGlobal.logisticaGlobal || 0;
+    const logPV = estadoGlobal.precioVentaLogistica || (logTotal / 0.7);
     
-    sheet3.addRow(['', 'Personal Simultáneo', cotizacionData.personalSimultaneo || 0]);
-    sheet3.addRow(['', 'Días Reales de Obra', cotizacionData.diasObra || 0]);
-    sheet3.addRow(['', 'Viáticos (días × pers × tarifa)', cotizacionData.viaticos || 0]).getCell(3).numFmt = moneyFormat;
-    sheet3.addRow(['', 'Hospedaje (noches × pers × tarifa)', cotizacionData.hospedaje || 0]).getCell(3).numFmt = moneyFormat;
-    sheet3.addRow(['', 'Movilidad (vehículos × viaje)', cotizacionData.movilidad || 0]).getCell(3).numFmt = moneyFormat;
+    sheet3.addRow(['', 'Personal Simultáneo', estadoGlobal.personalSimultaneo || 0]);
+    sheet3.addRow(['', 'Días Reales de Obra', estadoGlobal.diasObra || 0]);
+    sheet3.addRow(['', 'Viáticos (días × pers × tarifa)', estadoGlobal.viaticos || 0]).getCell(3).numFmt = moneyFormat;
+    sheet3.addRow(['', 'Hospedaje (noches × pers × tarifa)', estadoGlobal.hospedaje || 0]).getCell(3).numFmt = moneyFormat;
+    sheet3.addRow(['', 'Movilidad (vehículos × viaje)', estadoGlobal.movilidad || 0]).getCell(3).numFmt = moneyFormat;
     sheet3.addRow([]);
     sheet3.addRow(['', 'TOTAL LOGÍSTICA (costo puro)', logTotal]).getCell(3).numFmt = moneyFormat;
     sheet3.addRow(['', 'Margen Logística (30%)', logPV - logTotal]).getCell(3).numFmt = moneyFormat;
@@ -967,8 +967,8 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
     // Gastos Admin
     sheet3.addRow([]);
     sheet3.addRow(['', 'GASTOS ADMINISTRATIVOS Y FINANCIEROS (Distribuidos proporcionalmente)']);
-    sheet3.addRow(['', 'Porcentaje configurado', (cotizacionData.gastosAdminFinancieroPct || 6)/100]).getCell(3).numFmt = percentFormat;
-    sheet3.addRow(['', 'Total cargado en P.Venta', cotizacionData.gastosAdminSSTT || 0]).getCell(3).numFmt = moneyFormat;
+    sheet3.addRow(['', 'Porcentaje configurado', (estadoGlobal.gastosAdminFinancieroPct || 6)/100]).getCell(3).numFmt = percentFormat;
+    sheet3.addRow(['', 'Total cargado en P.Venta', estadoGlobal.gastosAdminSSTT || 0]).getCell(3).numFmt = moneyFormat;
 
   // =========================================================================
   // HOJA 4: Condiciones Comerciales
