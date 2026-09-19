@@ -33,6 +33,8 @@ function Bloque2_SSTT({
   setAplicarSSMAProvision,
   porcentajeSSMAProvision = 5,
   setPorcentajeSSMAProvision,
+  gastosAdminFinancieroPct = 6,
+  setGastosAdminFinancieroPct,
   logisticsOverrides = { enabled: false },
   setLogisticsOverrides,
   // CALLBACKS AL PADRE
@@ -108,7 +110,7 @@ function Bloque2_SSTT({
   const [showAdHocModal, setShowAdHocModal] = useState(false);
   const [adHocState, setAdHocState] = useState({
     equipo: '', tension: '500 kV', horas_equipo: 4, horas_servicio: 4, interno: 1, ayudante: 1, externo: 0,
-    costo_total_base: 0, is_tercerizado: false, margen_tercerizado: 30, saveToDb: false,
+    costo_total_base: 0, is_tercerizado: false, margen_tercerizado: 30, incluye_en_logistica: false, saveToDb: false,
     modo_subcontrato: 'fijo', // 'fijo' | 'jornal'
     sub_esp_cant: 1, sub_esp_costo_dia: 450000, sub_esp_dias: 1,
     sub_aux_cant: 1, sub_aux_costo_dia: 250000, sub_aux_dias: 1,
@@ -299,7 +301,8 @@ function Bloque2_SSTT({
           is_tercerizado: true,
           modo_subcontrato: 'fijo',
           costo_total_base: foundFreq.costo_total_base || 0,
-          margen_tercerizado: 30
+          margen_tercerizado: 30,
+        incluye_en_logistica: false
         }
       };
     } else if (foundDb) {
@@ -467,6 +470,7 @@ function Bloque2_SSTT({
       is_tercerizado: item.overrides?.is_tercerizado ?? false,
       margen: item.overrides?.margen ?? 50,
       margen_tercerizado: item.overrides?.margen_tercerizado ?? 30,
+      incluye_en_logistica: item.overrides?.incluye_en_logistica ?? false,
       modo_subcontrato: item.overrides?.modo_subcontrato ?? 'fijo',
       sub_esp_cant: item.overrides?.sub_esp_cant ?? 1,
       sub_esp_costo_dia: item.overrides?.sub_esp_costo_dia ?? 450000,
@@ -557,6 +561,7 @@ function Bloque2_SSTT({
         sub_aux_dias: Number(adHocState.sub_aux_dias) || 0,
         costo_total_base: costoSubcontratoEfectivo,
         margen_tercerizado: adHocState.margen_tercerizado,
+          incluye_en_logistica: adHocState.incluye_en_logistica ?? false,
         costoServiceFee: adHocState.costoServiceFee,
         margenServiceFee: adHocState.margenServiceFee,
         costoAmortizacion: adHocState.costoAmortizacion,
@@ -909,6 +914,20 @@ function Bloque2_SSTT({
                           <input type="number" value={overrideState.margen_tercerizado} onChange={(e) => setOverrideState({...overrideState, margen_tercerizado: parseFloat(e.target.value)||0})} style={{ width: '100px', borderColor: '#a855f7' }} />
                         </td>
                       </tr>
+                      <tr>
+                        <td colSpan="3" style={{ padding: '8px 10px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                            <input
+                              type="checkbox"
+                              checked={overrideState.incluye_en_logistica ?? false}
+                              onChange={(e) => setOverrideState({...overrideState, incluye_en_logistica: e.target.checked})}
+                              style={{ width: '16px', height: '16px', accentColor: '#0284c7' }}
+                            />
+                            <span style={{ color: '#0284c7', fontWeight: 600 }}>🚚 Incluir en prorrateo de logística</span>
+                            <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>(default: NO)</span>
+                          </label>
+                        </td>
+                      </tr>
                     </>
                   ) : (
                     <>
@@ -1230,6 +1249,19 @@ function Bloque2_SSTT({
                         </div>
                       </td>
                       <td><input type="number" value={adHocState.margen_tercerizado} onChange={e => setAdHocState({...adHocState, margen_tercerizado: parseFloat(e.target.value)||0})} style={{ borderColor: '#a855f7' }}/></td>
+                    </tr>
+                    <tr>
+                      <td colSpan="2" style={{ padding: '6px 8px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.82rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={adHocState.incluye_en_logistica ?? false}
+                            onChange={e => setAdHocState({...adHocState, incluye_en_logistica: e.target.checked})}
+                            style={{ width: '15px', height: '15px', accentColor: '#0284c7' }}
+                          />
+                          <span style={{ color: '#0284c7', fontWeight: 600 }}>🚚 Incluir en prorrateo de logística</span>
+                        </label>
+                      </td>
                     </tr>
                   </>
                 )}
@@ -1910,6 +1942,25 @@ function Bloque2_SSTT({
                 <div className="form-group">
                   <label>Margen Adicional Imprevistos (%)</label>
                   <input type="number" min="0" value={margenImprevistosPorcentaje} onChange={(e) => { setMargenImprevistosPorcentaje(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
+                </div>
+                <div className="form-group">
+                  <label style={{ fontWeight: 'bold', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ background: '#e0f2fe', color: '#0369a1', borderRadius: '4px', padding: '1px 7px', fontSize: '0.75rem', fontWeight: 700 }}>ADM</span>
+                    Gastos Adm. y Financieros (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="50"
+                    step="0.5"
+                    value={gastosAdminFinancieroPct}
+                    onChange={(e) => { setGastosAdminFinancieroPct(parseFloat(e.target.value) || 0); setIsDirty(true); }}
+                    style={{ borderColor: '#0369a1' }}
+                  />
+                  <small style={{ color: '#64748b', display: 'block', marginTop: '3px', lineHeight: 1.4 }}>
+                    Aplicado sobre P. Venta S/IVA. Default: 6%.<br/>
+                    Se distribuye en el precio de cada ítem.
+                  </small>
                 </div>
               </div>
             </div>

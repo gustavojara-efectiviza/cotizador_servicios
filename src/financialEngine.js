@@ -30,6 +30,9 @@ export const calcularCotizacionActiva = (cotizacion) => {
   const aplicarGastosIndirectos = cotizacion.aplicarGastosIndirectos !== false;
   const Dias_Permitidos_Corte = Math.max(1, Number(cotizacion.Dias_Permitidos_Corte) || 1);
   const Distancia_Ida_Vuelta_km = Number(cotizacion.Distancia_Ida_Vuelta_km) || 0;
+  // Gastos Administrativos y Financieros (% sobre P.Venta, configurable, default 6%)
+  const gastosAdminFinancieroPct = Number(cotizacion.gastosAdminFinancieroPct ?? 6);
+  const gastosAdminRate = Math.min(0.50, Math.max(0, gastosAdminFinancieroPct / 100));
   
   const condicionTrabajo = Number(cotizacion.condicionTrabajo) || 1.0;
   const Gastos_Imprevistos = aplicarGastosIndirectos ? ((Number(cotizacion.Gastos_Imprevistos) || 0) * condicionTrabajo) : 0;
@@ -56,6 +59,7 @@ export const calcularCotizacionActiva = (cotizacion) => {
   // Paso 1.1: Pre-calcular costos directos puros por ítem
   const itemsDirectosCrudos = equiposCotizados.map(item => {
     const isTercerizado = item.overrides?.is_tercerizado === true;
+    const incluye_en_logistica = isTercerizado ? (item.overrides?.incluye_en_logistica === true) : true;
     const isTopDown = item.overrides?.top_down_enabled === true; 
     const qty = Number(item.cantidad) || 1;
 
@@ -149,6 +153,7 @@ export const calcularCotizacionActiva = (cotizacion) => {
       ...item,
       qty,
       isTercerizado,
+      incluye_en_logistica,
       isTopDown,
       valorInyectadoItem,
       horas_equipo,
@@ -243,85 +248,137 @@ export const calcularCotizacionActiva = (cotizacion) => {
   // Costo Directo Total Puro
   const Costo_Directo_Total = Costo_Tecnologia_Total + Costo_Mano_Obra_Total + Logistica_Global_Total + Total_Alquileres + Costo_Subcontratistas_Total + Gastos_Imprevistos + Costo_ServiceFee_Total + Costo_Amortizacion_Total + Costo_SSMA_Consumibles;
 
-  // Gastos Administrativos (3% sobre Costo Directo Total)
-  const Gastos_Administrativos = Costo_Directo_Total * (Variables_Globales.Gastos_Administrativos_Porcentaje / 100);
+  // Gastos Administrativos y Financieros ahora se calculan por ítem (ver PASO 3 en el loop)
 
-  // 3. ABSORCIÓN TOTAL DE COSTOS INDIRECTOS (Full Absorption Engine)
-  const sumaMOPropia = itemsDirectosCrudos
-    .filter(i => !i.isTercerizado)
-    .reduce((acc, i) => acc + (i.Costo_MO_Item * i.qty), 0);
+    // 3. COSTEO DIRECTO POR CATEGORÍA con Prorrateo Proporcional de Logística
+  // Modelo: cada categoría lleva su propio margen; logística se proratea por peso MO.
+  
+  // Pool de prorrateo: MO propia siempre, tercerizados solo si incluye_en_logistica=true
+  const itemsEnPool = itemsDirectosCrudos.filter(i =>
+    !i.isTercerizado || i.incluye_en_logistica === true
+  );
+  const sumaMOPool = itemsEnPool.reduce((acc, i) => {
+    const base = i.isTercerizado ? i.Costo_Subcontrato_Item : i.Costo_MO_Item;
+    return acc + base * i.qty;
+  }, 0);
 
-  const sumaCostoDirectoSSTTTotal = itemsDirectosCrudos
-    .reduce((acc, i) => acc + i.Costo_Directo_Total_Item, 0);
+  // Precio de venta de logística e imprevistos (con su propio margen independiente 30%)
+  const PV_Logistica_Total = (sumaMOPool > 0 && Logistica_Global_Total > 0)
+    ? (Logistica_Global_Total / (1 - 0.30))
+    : 0;
+  const margenImpDec = Margen_Imprevistos_Porcentaje > 0
+    ? Math.min(0.99, Margen_Imprevistos_Porcentaje / 100)
+    : 0.30;
+  const PV_Imprevistos_Total = (sumaMOPool > 0 && Gastos_Imprevistos > 0)
+    ? (Gastos_Imprevistos / (1 - margenImpDec))
+    : 0;
+
+  // Tabla de distribución para auditoría
+  const Pool_Logistica_Tabla = [];
 
   const equiposProcesados = [];
   let gananciaTercerizadosTotal = 0;
   let gananciaIngenieriaTotal = 0;
-  let gananciaTecnologiaTotal = 0;
   let precioVentaServiciosTotal = 0;
+  let totalGastosAdminFinanciero = 0;
 
   itemsDirectosCrudos.forEach(item => {
     const qty = item.qty;
-    let logAsignada = 0;
-    let impAsignado = 0;
-    let adminAsignado = 0;
+
+    // SSMA: solo sobre ítems MO propia o tercerizados con toggle ON
     let ssmaAsignado = 0;
-
-    // Regla de Negocio: Logística e Imprevistos se absorben 100% en Mano de Obra Propia
-    if (!item.isTercerizado && sumaMOPropia > 0) {
-      const pesoMO = (item.Costo_MO_Item * qty) / sumaMOPropia;
-      logAsignada = Logistica_Global_Total * pesoMO;
-      impAsignado = Gastos_Imprevistos * pesoMO;
-    }
-
-    // Regla de Negocio: Provisión SSMA y Consumibles absorbida en Mano de Obra / Subcontrato
     if (baseCalculoSSMA > 0 && Costo_SSMA_Consumibles > 0) {
       const baseItem = item.isTercerizado ? (item.Costo_Subcontrato_Item * qty) : (item.Costo_MO_Item * qty);
       ssmaAsignado = Costo_SSMA_Consumibles * (baseItem / baseCalculoSSMA);
     }
 
-    // Regla de Negocio: Gastos Administrativos (Overhead 3%) se prorratean en SSTT
-    if (sumaCostoDirectoSSTTTotal > 0) {
-      const pesoDirecto = item.Costo_Directo_Total_Item / sumaCostoDirectoSSTTTotal;
-      adminAsignado = Gastos_Administrativos * pesoDirecto;
+    // Peso en el pool de prorrateo de logística
+    const basePool = item.isTercerizado ? item.Costo_Subcontrato_Item : item.Costo_MO_Item;
+    const enPool = !item.isTercerizado || item.incluye_en_logistica === true;
+    const pesoLog = (enPool && sumaMOPool > 0) ? ((basePool * qty) / sumaMOPool) : 0;
+
+    // Cuotas de logística e imprevistos CON margen (lo que se suma al precio del ítem)
+    const cuota_log_pv   = PV_Logistica_Total   * pesoLog; // precio de venta de la cuota log
+    const cuota_imp_pv   = PV_Imprevistos_Total * pesoLog; // precio de venta de la cuota imp
+    const cuota_log_costo = Logistica_Global_Total * pesoLog; // costo puro (para auditoría)
+    const cuota_imp_costo = Gastos_Imprevistos * pesoLog;     // costo puro (para auditoría)
+
+    // PASO 1: Precio Servicio Puro (margen del ítem sobre su MO/subcontrato)
+    const divisorServicio = Math.max(0.01, 1 - Math.min(0.99, item.margenDecimal));
+    let precio_servicio_total;
+    if (item.isTopDown && item.valorInyectadoItem > 0) {
+      precio_servicio_total = item.valorInyectadoItem * qty;
+    } else if (item.isTercerizado) {
+      precio_servicio_total = (item.Costo_Subcontrato_Item * qty) / divisorServicio;
+    } else {
+      precio_servicio_total = item.Costo_Directo_Total_Item / divisorServicio;
     }
 
-    // Costo Total Real Absorbido
-    const costo_total_real = item.Costo_Directo_Total_Item + logAsignada + impAsignado + adminAsignado + ssmaAsignado;
-    
-    // Ecuación de Rentabilidad Core: Precio_Venta = Costo_Total_Absorbido / (1 - Margen)
-    const divisor = Math.max(0.01, 1 - Math.min(0.99, item.margenDecimal));
-    const precio_total_final = item.isTopDown && item.valorInyectadoItem > 0 
-      ? (item.valorInyectadoItem * qty) 
-      : (costo_total_real / divisor);
-    
+    // PASO 2: Subtotal antes de Gastos Adm. y Financieros
+    const subtotal_antes_admin = precio_servicio_total + cuota_log_pv + cuota_imp_pv + ssmaAsignado;
+
+    // PASO 3: Gastos Administrativos y Financieros (% sobre P.Venta — aplicado al precio)
+    const precio_total_final = gastosAdminRate < 1
+      ? (subtotal_antes_admin / (1 - gastosAdminRate))
+      : subtotal_antes_admin;
+    const cuota_admin_total = precio_total_final - subtotal_antes_admin;
+    totalGastosAdminFinanciero += cuota_admin_total;
+
     const precio_unitario_final = qty > 0 ? (precio_total_final / qty) : 0;
-    const utilidad_total_item = precio_total_final - costo_total_real;
+
+    // Ganancias desglosadas por categoría
+    const ganancia_servicio = precio_servicio_total - item.Costo_Directo_Total_Item;
+    const ganancia_log_item = cuota_log_pv - cuota_log_costo;
+    const ganancia_imp_item = cuota_imp_pv - cuota_imp_costo;
+    const utilidad_total_item = ganancia_servicio + ganancia_log_item + ganancia_imp_item;
     const utilidad_neta_unitaria = qty > 0 ? (utilidad_total_item / qty) : 0;
 
     if (item.isTercerizado) {
-      gananciaTercerizadosTotal += utilidad_total_item;
+      gananciaTercerizadosTotal += ganancia_servicio;
     } else {
-      gananciaIngenieriaTotal += utilidad_total_item;
+      gananciaIngenieriaTotal += ganancia_servicio;
     }
 
     precioVentaServiciosTotal += precio_total_final;
+
+    // Registrar en tabla de distribución logística
+    if (enPool && pesoLog > 0) {
+      Pool_Logistica_Tabla.push({
+        equipo: item.equipo || item.baseData?.equipo || 'Ítem',
+        qty,
+        MO_base: basePool * qty,
+        peso_pct: pesoLog * 100,
+        cuota_log_costo,
+        cuota_log_pv,
+        ganancia_log_item,
+        cuota_imp_costo,
+        cuota_imp_pv,
+      });
+    }
 
     equiposProcesados.push({
       ...item,
       estrategia: item.isTercerizado ? 'Subcontrato' : (item.isTopDown ? 'Top-Down' : 'Normal'),
       costo_directo_unitario: item.Costo_Directo_Unitario,
-      admin_unitario: qty > 0 ? (adminAsignado / qty) : 0,
       ssma_unitario: qty > 0 ? (ssmaAsignado / qty) : 0,
       utilidad_neta_unitaria,
       precio_unitario_final,
       precio_total_final,
+      precio_servicio_unitario: qty > 0 ? (precio_servicio_total / qty) : 0,
+      cuota_logistica_unitaria: qty > 0 ? (cuota_log_pv / qty) : 0,
+      costo_logistica_asignado_unitario: qty > 0 ? (cuota_log_costo / qty) : 0,
+      cuota_imprevistos_unitaria: qty > 0 ? (cuota_imp_pv / qty) : 0,
+      cuota_admin_unitaria: qty > 0 ? (cuota_admin_total / qty) : 0,
+      ganancia_servicio_unitaria: qty > 0 ? (ganancia_servicio / qty) : 0,
+      ganancia_logistica_unitaria: qty > 0 ? (ganancia_log_item / qty) : 0,
+      peso_en_prorrateo: pesoLog * 100,
+      incluye_en_logistica: item.incluye_en_logistica,
       horas_equipo: item.horas_equipo,
       horas_servicio: item.horas_servicio,
-      costo_total_real,
-      logAsignada,
-      impAsignado,
-      adminAsignado,
+      costo_total_real: item.Costo_Directo_Total_Item + cuota_log_costo + cuota_imp_costo,
+      logAsignada: cuota_log_costo,
+      impAsignado: cuota_imp_costo,
+      adminAsignado: cuota_admin_total,
       ssmaAsignado,
       margen: item.margenDecimal,
       // Desglose crudo para Auditoría
@@ -339,7 +396,7 @@ export const calcularCotizacionActiva = (cotizacion) => {
     });
   });
 
-  // 4. PROCESAMIENTO DE ALQUILERES ESPECIALES (Full Absorption)
+    // 4. PROCESAMIENTO DE ALQUILERES ESPECIALES (Full Absorption)
   let precioVentaAlquileresTotal = 0;
   let gananciaAlquileresTotal = 0;
 
@@ -378,17 +435,18 @@ export const calcularCotizacionActiva = (cotizacion) => {
   // 5. PRECIO FINAL CONSOLIDADOR Y GANANCIA NETA TOTAL
   const Precio_Venta_Final = precioVentaServiciosTotal + precioVentaAlquileresTotal;
   
-  // Ganancia Neta Real = Precio_Venta_Final - Costo_Directo_Total - Gastos_Administrativos
-  const Ganancia_Neta_Esperada = Precio_Venta_Final - Costo_Directo_Total - Gastos_Administrativos;
+  // Ganancia Neta Real (nuevo modelo: Admin es traslado de costo, no ganancia)
+  const Ganancia_Neta_Esperada = Precio_Venta_Final - Costo_Directo_Total - totalGastosAdminFinanciero;
   const Margen_Real_Porcentaje = Precio_Venta_Final > 0 ? (Ganancia_Neta_Esperada / Precio_Venta_Final) * 100 : 0;
 
   // Desglose de Ganancias para el Panel del CRM
-  const Ganancia_Logistica = Logistica_Global_Total * (Variables_Globales.Margen_Ganancia_Logistica / 100);
-  const Ganancia_Imprevistos = Gastos_Imprevistos * (Margen_Imprevistos_Porcentaje > 0 ? (Margen_Imprevistos_Porcentaje / 100) : 0.30);
+  // En el nuevo modelo, las ganancias ya están calculadas por categoría en el loop
+  const Ganancia_Logistica = PV_Logistica_Total - Logistica_Global_Total; // ganancia real de log (30%)
+  const Ganancia_Imprevistos = PV_Imprevistos_Total - Gastos_Imprevistos;
   const Ganancia_SSMA = Costo_SSMA_Consumibles * 0.30;
   const Ganancia_Tecnologia_Total = Costo_Tecnologia_Total * (Variables_Globales.MARGEN_TECNOLOGIA || 0.40);
-  const Ganancia_Ingenieria_Pura = Math.max(0, gananciaIngenieriaTotal - Ganancia_Tecnologia_Total - Ganancia_Logistica - Ganancia_Imprevistos - (aplicarSSMAProvision ? Ganancia_SSMA : 0));
-  const Precio_Venta_Logistica = Logistica_Global_Total + Ganancia_Logistica;
+  const Ganancia_Ingenieria_Pura = Math.max(0, gananciaIngenieriaTotal - Ganancia_Tecnologia_Total);
+  const Precio_Venta_Logistica = PV_Logistica_Total;
 
   return {
     aplicarGastosIndirectos,
@@ -426,7 +484,12 @@ export const calcularCotizacionActiva = (cotizacion) => {
     Ganancia_Tercerizados_Nuevos: gananciaTercerizadosTotal,
     Ganancia_ServiceFee_Total: 0,
     Ganancia_Amortizacion_Total: 0,
-    Gastos_Administrativos,
+    gastosAdminFinancieroPct,
+    Gastos_Administrativos: totalGastosAdminFinanciero,
+    Gastos_Admin_Financiero_Total: totalGastosAdminFinanciero,
+    Pool_Logistica_Tabla,
+    PV_Logistica_Total,
+    PV_Imprevistos_Total,
     Ganancia_Neta_Esperada,
     Precio_Venta_Final,
     Margen_Real_Porcentaje,

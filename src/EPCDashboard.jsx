@@ -83,6 +83,7 @@ export default function EPCDashboard() {
   const [aplicarGastosIndirectos, setAplicarGastosIndirectos] = useState(true);
   const [aplicarSSMAProvision, setAplicarSSMAProvision] = useState(true);
   const [porcentajeSSMAProvision, setPorcentajeSSMAProvision] = useState(5);
+  const [gastosAdminFinancieroPct, setGastosAdminFinancieroPct] = useState(6);
   const [logisticsOverrides, setLogisticsOverrides] = useState({ enabled: false });
 
   // Estado Global Bloque 0
@@ -149,6 +150,7 @@ export default function EPCDashboard() {
           aplicarGastosIndirectos,
           aplicarSSMAProvision,
           porcentajeSSMAProvision,
+          gastosAdminFinancieroPct,
           logisticsOverrides
         },
         totales: {
@@ -272,6 +274,7 @@ export default function EPCDashboard() {
     setAplicarGastosIndirectos(sstt.aplicarGastosIndirectos !== undefined ? sstt.aplicarGastosIndirectos : (quote.aplicarGastosIndirectos ?? true));
     setAplicarSSMAProvision(sstt.aplicarSSMAProvision !== undefined ? sstt.aplicarSSMAProvision : (quote.aplicarSSMAProvision ?? true));
     setPorcentajeSSMAProvision(sstt.porcentajeSSMAProvision ?? quote.porcentajeSSMAProvision ?? 5);
+    setGastosAdminFinancieroPct(sstt.gastosAdminFinancieroPct ?? quote.gastosAdminFinancieroPct ?? 6);
     setLogisticsOverrides(sstt.logisticsOverrides ?? quote.logisticsOverrides ?? { enabled: false });
 
     // Restaurar el ID para que el próximo guardado haga UPDATE, no INSERT
@@ -298,6 +301,7 @@ export default function EPCDashboard() {
     setAplicarGastosIndirectos(true);
     setAplicarSSMAProvision(true);
     setPorcentajeSSMAProvision(5);
+    setGastosAdminFinancieroPct(6);
     setLogisticsOverrides({ enabled: false });
     setTotalProcura(0);
     setTotalServicios(0);
@@ -729,6 +733,8 @@ export default function EPCDashboard() {
                   setAplicarSSMAProvision={setAplicarSSMAProvision}
                   porcentajeSSMAProvision={porcentajeSSMAProvision}
                   setPorcentajeSSMAProvision={setPorcentajeSSMAProvision}
+                  gastosAdminFinancieroPct={gastosAdminFinancieroPct}
+                  setGastosAdminFinancieroPct={setGastosAdminFinancieroPct}
                   logisticsOverrides={logisticsOverrides}
                   setLogisticsOverrides={setLogisticsOverrides}
                   setTotalServicios={setTotalServicios} 
