@@ -169,7 +169,11 @@ export default function Bloque3_Resumen({
       hospedaje: Number(resultadosSSTT?.Costo_Hospedaje_Total) || 0,
       movilidad: Number(resultadosSSTT?.Costo_Movilidad_Total) || 0,
       esLicitacion,
-      moneda: monedaTrabajo,
+      poolLogistica: resultadosSSTT?.Pool_Logistica_Tabla || [],
+        diasObra: Number(resultadosSSTT?.Dias_Reales_Obra) || 0,
+        personalSimultaneo: Number(resultadosSSTT?.Personal_Simultaneo) || 0,
+        gastosAdminFinancieroPct: Number(resultadosSSTT?.gastosAdminFinancieroPct) || 6,
+        moneda: monedaTrabajo,
       tasaCambio: tipoCambio
     };
     await exportarAExcelAuditable(estadoGlobal);

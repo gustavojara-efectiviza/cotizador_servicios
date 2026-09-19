@@ -913,6 +913,63 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
   }
 
 
+
+    // --- SECCIÓN A: CÁLCULO BASE DE LOGÍSTICA ---
+    sheet3.addRow([]);
+    const rowLogTitle = sheet3.addRow(['', 'ANEXO LOGÍSTICA - SECCIÓN A: CÁLCULO BASE DE LOGÍSTICA Y MOVILIZACIÓN']);
+    rowLogTitle.getCell(2).font = blackFontBold;
+    
+    sheet3.addRow(['', 'Concepto', 'Valor']);
+    const poolLog = cotizacionData.poolLogistica || [];
+    const logTotal = cotizacionData.logisticaGlobal || 0;
+    const logPV = cotizacionData.precioVentaLogistica || (logTotal / 0.7);
+    
+    sheet3.addRow(['', 'Personal Simultáneo', cotizacionData.personalSimultaneo || 0]);
+    sheet3.addRow(['', 'Días Reales de Obra', cotizacionData.diasObra || 0]);
+    sheet3.addRow(['', 'Viáticos (días × pers × tarifa)', cotizacionData.viaticos || 0]).getCell(3).numFmt = moneyFormat;
+    sheet3.addRow(['', 'Hospedaje (noches × pers × tarifa)', cotizacionData.hospedaje || 0]).getCell(3).numFmt = moneyFormat;
+    sheet3.addRow(['', 'Movilidad (vehículos × viaje)', cotizacionData.movilidad || 0]).getCell(3).numFmt = moneyFormat;
+    sheet3.addRow([]);
+    sheet3.addRow(['', 'TOTAL LOGÍSTICA (costo puro)', logTotal]).getCell(3).numFmt = moneyFormat;
+    sheet3.addRow(['', 'Margen Logística (30%)', logPV - logTotal]).getCell(3).numFmt = moneyFormat;
+    const rPVLog = sheet3.addRow(['', 'PRECIO VENTA LOGÍSTICA TOTAL', logPV]);
+    rPVLog.getCell(2).font = blackFontBold;
+    rPVLog.getCell(3).font = blackFontBold;
+    rPVLog.getCell(3).numFmt = moneyFormat;
+
+    // --- SECCIÓN B: DISTRIBUCIÓN POR ÍTEM ---
+    sheet3.addRow([]);
+    const rowLogTitleB = sheet3.addRow(['', 'ANEXO LOGÍSTICA - SECCIÓN B: DISTRIBUCIÓN POR ÍTEM DE SERVICIO']);
+    rowLogTitleB.getCell(2).font = blackFontBold;
+
+    if (poolLog.length === 0) {
+      sheet3.addRow(['', 'Sin ítems en el pool de prorrateo']);
+    } else {
+      const headerB = sheet3.addRow(['', 'Ítem de Servicio', 'Peso (%)', 'Cuota Log. Costo', 'Cuota Log. P.Venta', 'Ganancia Log.']);
+      headerB.eachCell(c => c.font = blackFontBold);
+      
+      let sumMO = 0, sumCuotaCosto = 0, sumCuotaPV = 0, sumGanLog = 0;
+      poolLog.forEach(row => {
+        sumCuotaCosto += row.cuota_log_costo || 0;
+        sumCuotaPV += row.cuota_log_pv || 0;
+        sumGanLog += row.ganancia_log_item || 0;
+        const rItem = sheet3.addRow(['', row.equipo, (row.peso_pct || 0)/100, row.cuota_log_costo || 0, row.cuota_log_pv || 0, row.ganancia_log_item || 0]);
+        rItem.getCell(3).numFmt = percentFormat;
+        [4, 5, 6].forEach(col => rItem.getCell(col).numFmt = moneyFormat);
+      });
+      
+      const rTotalB = sheet3.addRow(['', 'TOTAL', 1, sumCuotaCosto, sumCuotaPV, sumGanLog]);
+      rTotalB.eachCell(c => c.font = blackFontBold);
+      rTotalB.getCell(3).numFmt = percentFormat;
+      [4, 5, 6].forEach(col => rTotalB.getCell(col).numFmt = moneyFormat);
+    }
+    
+    // Gastos Admin
+    sheet3.addRow([]);
+    sheet3.addRow(['', 'GASTOS ADMINISTRATIVOS Y FINANCIEROS (Distribuidos proporcionalmente)']);
+    sheet3.addRow(['', 'Porcentaje configurado', (cotizacionData.gastosAdminFinancieroPct || 6)/100]).getCell(3).numFmt = percentFormat;
+    sheet3.addRow(['', 'Total cargado en P.Venta', cotizacionData.gastosAdminSSTT || 0]).getCell(3).numFmt = moneyFormat;
+
   // =========================================================================
   // HOJA 4: Condiciones Comerciales
   // =========================================================================
