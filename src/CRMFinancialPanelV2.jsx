@@ -32,8 +32,9 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
     let costoEquipos = 0, utilidadEquipos = 0, precioEquipos = 0;
     itemsParaExcel.forEach(item => {
       costoEquipos += (item.costo_directo_unitario || 0) * (item.cantidad || 1);
-      utilidadEquipos += (item.utilidad_neta_unitaria || 0) * (item.cantidad || 1);
-      precioEquipos += (item.precio_unitario_final || 0) * (item.cantidad || 1);
+      utilidadEquipos += (item.ganancia_servicio_unitaria || item.utilidad_neta_unitaria || 0) * (item.cantidad || 1);
+      // precio_servicio_unitario = MO solo, sin log embebida (para no duplicar con la fila de logistica)
+        precioEquipos += (item.precio_servicio_unitario || item.precio_unitario_final || 0) * (item.cantidad || 1);
     });
     const margenEquipos = precioEquipos > 0 ? (utilidadEquipos / precioEquipos) * 100 : 0;
     rowsResumen.push([
@@ -47,7 +48,7 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
     // Logística
     const costoLogistica = resultados.Logistica_Global_Total || 0;
     const utilidadLogistica = resultados.Ganancia_Logistica || 0;
-    const precioLogistica = resultados.Precio_Venta_Logistica || 0;
+    const precioLogistica = resultados.PV_Logistica_Total || resultados.Precio_Venta_Logistica || 0;
     const margenLogistica = precioLogistica > 0 ? (utilidadLogistica / precioLogistica) * 100 : 0;
     rowsResumen.push([
       "Logística, Movilización y Despliegue",
@@ -129,15 +130,18 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
       "Equipo / Servicio",
       "Estrategia",
       "Cantidad",
-      "Horas Unitarias Estimadas",
-      "Horas Totales Estimadas",
+      "Horas Unitarias Est.",
+      "Horas Totales Est.",
       "Costo Directo Base",
       "Costo Service Fee",
       "Costo Amortización",
-      "Costo Directo Total",
+      "Costo Directo Total (MO)",
+      "Precio Servicio Puro Unit. (sin Log.)",
+      "Cuota Logística Embebida Unit. (c/margen 30%)",
+      "Cuota Adm. y Financ. Unit. (6%)",
       "Utilidad Neta Unitaria",
-      "Margen %",
-      "Precio Venta Unitario",
+      "Margen % s/Precio Final",
+      "Precio Venta Unitario (MO + Log + Adm)",
       "Precio Venta Total del Ítem"
     ]);
 
@@ -261,7 +265,7 @@ export default function CRMFinancialPanelV2({ resultados, cotizacion, equiposCot
 
     // Ajustar anchos
     wsResumen['!cols'] = [{wch: 50}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}];
-    wsEquipos['!cols'] = [{wch: 35}, {wch: 15}, {wch: 10}, {wch: 22}, {wch: 20}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 20}, {wch: 20}, {wch: 12}, {wch: 20}, {wch: 22}];
+    wsEquipos['!cols'] = [{wch: 40}, {wch: 14}, {wch: 8}, {wch: 16}, {wch: 16}, {wch: 18}, {wch: 16}, {wch: 16}, {wch: 20}, {wch: 28}, {wch: 32}, {wch: 24}, {wch: 18}, {wch: 16}, {wch: 26}, {wch: 22}];
     wsLogistica['!cols'] = [{wch: 45}, {wch: 10}, {wch: 18}, {wch: 12}, {wch: 18}, {wch: 20}, {wch: 20}];
 
     XLSX.utils.book_append_sheet(workbook, wsResumen, "Resumen Ejecutivo");
