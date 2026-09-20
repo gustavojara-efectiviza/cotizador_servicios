@@ -318,10 +318,8 @@ export const calcularCotizacionActiva = (cotizacion) => {
     const subtotal_antes_admin = precio_servicio_total + cuota_log_pv + cuota_imp_pv + ssmaAsignado;
 
     // PASO 3: Gastos Administrativos y Financieros (% sobre P.Venta — aplicado al precio)
-    const precio_total_final = gastosAdminRate < 1
-      ? (subtotal_antes_admin / (1 - gastosAdminRate))
-      : subtotal_antes_admin;
-    const cuota_admin_total = precio_total_final - subtotal_antes_admin;
+    const cuota_admin_total = subtotal_antes_admin * gastosAdminRate;
+    const precio_total_final = subtotal_antes_admin + cuota_admin_total;
     totalGastosAdminFinanciero += cuota_admin_total;
 
     const precio_unitario_final = qty > 0 ? (precio_total_final / qty) : 0;
