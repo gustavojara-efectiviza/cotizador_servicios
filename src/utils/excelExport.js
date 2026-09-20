@@ -773,7 +773,7 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
     row.getCell(13).value = { formula: `D${r}*L${r}`, result: item.subtotalDirectoTotal };
     row.getCell(18).value = { formula: `M${r}+N${r}+O${r}+P${r}+Q${r}`, result: item.costoTotalReal };
     row.getCell(20).value = { formula: `U${r}/D${r}`, result: item.precioUnitarioConIVA };
-    row.getCell(21).value = { formula: `((M${r}/(1-S${r}))+(N${r}/0.7)+(O${r}/0.7)+P${r}+Q${r})*1.1`, result: item.precioVentaConIVA };
+    row.getCell(21).value = item.precioVentaConIVA;
 
     [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21].forEach(col => row.getCell(col).numFmt = moneyFormat);
     row.getCell(19).numFmt = percentFormat;
