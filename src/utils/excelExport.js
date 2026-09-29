@@ -75,11 +75,13 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
   // --- 2. PROCESAMIENTO DE SERVICIOS SSTT (Regla de Imprevistos, Tercerizados y MO Propia) ---
   const serviciosProcesados = servicios.map(item => {
     const qty = safeNum(item.cantidad) || 1;
-    const esTercerizado = item.estrategia === 'Subcontrato' || item.is_tercerizado === true || (safeNum(item.Costo_Subcontrato_Item) > 0 && safeNum(item.Costo_MO_Item) === 0);
+    const esTercerizado = item.estrategia === 'Subcontrato' || item.is_tercerizado === true || item.isTercerizado === true || (safeNum(item.Costo_Subcontrato_Item) > 0 && safeNum(item.Costo_MO_Item) === 0);
     
-    const cTec = esTercerizado ? 0 : safeNum(convertir(item.Costo_Tecnologia_Item, item.moneda || 'PYG'));
+    // Campos del motor: Costo_Tecnologia (sin _Item) o Costo_Tecnologia_Item (adaptado)
+    const cTec = esTercerizado ? 0 : safeNum(convertir(item.Costo_Tecnologia_Item || item.Costo_Tecnologia, item.moneda || 'PYG'));
     const cMO = esTercerizado ? 0 : safeNum(convertir(item.Costo_MO_Item, item.moneda || 'PYG'));
     const cSubc = esTercerizado ? safeNum(convertir(item.Costo_Subcontrato_Item || item.costoBase, item.moneda || 'PYG')) : 0;
+    // costoFee y costoAmort vienen del motor directamente
     const cFee = safeNum(convertir(item.costoFee || item.overrides?.costoServiceFee, item.moneda || 'PYG'));
     const cAmort = safeNum(convertir(item.costoAmort || item.overrides?.costoAmortizacion, item.moneda || 'PYG'));
     
@@ -88,6 +90,15 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
 
     const horas_equipo = esTercerizado ? 0 : (safeNum(item.horas_equipo));
     const horas_servicio = esTercerizado ? 0 : (safeNum(item.horas_servicio));
+
+    // Campos pre-calculados por el motor (precioVentaNeto, logAsignada, etc.)
+    const precioVentaNeto = item.precioVentaNeto || (item.precio_total_final ? item.precio_total_final / 1.10 : 0);
+    const precioVentaConIVA = item.precioVentaConIVA || item.precio_total_final || 0;
+    const logAsignada = item.logAsignada || 0;
+    const impAsignado = item.impAsignado || 0;
+    const ssmaAsignado = item.ssmaAsignado || 0;
+    const adminAsignado = item.adminAsignado || 0;
+    const margen = item.margen || item.margenDecimal || 0;
 
     return {
       ...item,
@@ -102,7 +113,14 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
       cFee,
       cAmort,
       subtotalDirectoUnit,
-      subtotalDirectoTotal
+      subtotalDirectoTotal,
+      precioVentaNeto,
+      precioVentaConIVA,
+      logAsignada,
+      impAsignado,
+      ssmaAsignado,
+      adminAsignado,
+      margen
     };
   });
 
