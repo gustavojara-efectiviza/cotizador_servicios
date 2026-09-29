@@ -809,7 +809,9 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
     row.getCell(20).value = { formula: `O${r}/0.70`, result: item.impAsignado / 0.70 };
     row.getCell(21).value = { formula: `P${r}/0.70`, result: (item.ssmaAsignado || 0) / 0.70 };
     row.getCell(23).value = { formula: `R${r}+S${r}+T${r}+U${r}+V${r}`, result: (item.subtotalDirectoTotal/divServ) + (item.logAsignada/0.7) + (item.impAsignado/0.7) + (item.ssmaAsignado||0) + item.adminAsignado };
-    const _costoRealItem = item.subtotalDirectoTotal + item.logAsignada + item.impAsignado + (item.ssmaAsignado || 0);
+    // Costo Real Total = Costo Directo Puro + Logística + Imprevistos + SSMA + Gastos Admin
+    // El PrecioVentaNeto ya absorbe el admin (6%), por lo que hay que incluirlo en el costo
+    const _costoRealItem = item.subtotalDirectoTotal + item.logAsignada + item.impAsignado + (item.ssmaAsignado || 0) + (item.adminAsignado || 0);
     const _utilidad = item.precioVentaNeto - _costoRealItem;
     const _margenBlended = item.precioVentaNeto > 0 ? _utilidad / item.precioVentaNeto : 0;
     row.getCell(24).value = { formula: `W${r}-Q${r}`, result: _utilidad };
@@ -854,9 +856,10 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
     totalRow3.getCell(21).value = { formula: `SUM(U${startRowSSTTAudit}:U${endRowSSTTAudit})`, result: sumSSTTSSMA / 0.70 };
     totalRow3.getCell(22).value = { formula: `SUM(V${startRowSSTTAudit}:V${endRowSSTTAudit})`, result: sumSSTTAdmin };
     totalRow3.getCell(23).value = { formula: `SUM(W${startRowSSTTAudit}:W${endRowSSTTAudit})`, result: sumSSTTVentaNeto };
-    const _sumUtilidad = sumSSTTVentaNeto - (sumSSTTSubDirectoTotal + sumSSTTLog + sumSSTTImp + sumSSTTSSMA);
-    totalRow3.getCell(24).value = { formula: `SUM(X${startRowSSTTAudit}:X${endRowSSTTAudit})`, result: _sumUtilidad };
+    // Utilidad neta real = Precio Venta Neto - TODOS los costos (incluye admin)
+    const _sumUtilidad = sumSSTTVentaNeto - (sumSSTTSubDirectoTotal + sumSSTTLog + sumSSTTImp + sumSSTTSSMA + sumSSTTAdmin);
     const _margenBlenTotal = sumSSTTVentaNeto > 0 ? _sumUtilidad / sumSSTTVentaNeto : 0;
+    totalRow3.getCell(24).value = { formula: `SUM(X${startRowSSTTAudit}:X${endRowSSTTAudit})`, result: _sumUtilidad };
     totalRow3.getCell(25).value = { formula: `X${totalRow3.number}/W${totalRow3.number}`, result: _margenBlenTotal };
     totalRow3.getCell(25).numFmt = percentFormat;
     totalRow3.getCell(26).value = { formula: `SUM(Z${startRowSSTTAudit}:Z${endRowSSTTAudit})`, result: sumSSTTVentaIVA };
