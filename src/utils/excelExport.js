@@ -801,46 +801,70 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
 
     row.getCell(12).value = { formula: `G${r}+H${r}+I${r}+J${r}+K${r}`, result: item.subtotalDirectoUnit };
     row.getCell(13).value = { formula: `D${r}*L${r}`, result: item.subtotalDirectoTotal };
-    row.getCell(17).value = { formula: `M${r}+N${r}+O${r}+P${r}+V${r}`, result: item.subtotalDirectoTotal + item.logAsignada + item.impAsignado + (item.ssmaAsignado || 0) + (item.adminAsignado || 0) };
-    
+
     const divServ = Math.max(0.01, 1 - Math.min(0.99, item.margen));
-    // TOP-DOWN: precio inyectado del mercado => ingenieria inversa para transparencia
-    // Normal/Subcontrato: PV reconstruido desde costos con margenes
-    // SSMA: va al costo en el motor (sin markup adicional), consistente con financialEngine.js
     const isTopDown = item.estrategia === 'Top-Down' || item.isTopDown === true;
-    let pvServicio, pvLog, pvImp, pvSSMA, pvAdmin;
+    const adminRate = 0.06;
+
     if (isTopDown && item.precio_total_final > 0) {
-      // Ingenieria inversa: precio de mercado es el PV neto total
-      // Admin 6%: PV_total = subtotal * 1.06 => subtotal = PV_total/1.06
-      const pvTotalMercado = item.precio_total_final;
-      const subtotalAntesAdmin = pvTotalMercado / 1.06;
-      pvLog = item.logAsignada / 0.70;
-      pvImp = item.impAsignado / 0.70;
-      pvSSMA = item.ssmaAsignado || 0;
-      pvServicio = subtotalAntesAdmin - pvLog - pvImp - pvSSMA;
-      pvAdmin = pvTotalMercado - subtotalAntesAdmin;
+      // TOP-DOWN: El precio viene dado por el mercado (Z = con IVA). Todo se calcula hacia atrs.
+      const pvTotalMercadoNeto = item.precio_total_final;
+      // Z (Col 26) se mantiene fijo como valor (al final de este bloque).
+      // W (Col 23): PV Neto. Le damos el valor fijo del mercado.
+      row.getCell(23).value = pvTotalMercadoNeto;
+      
+      // V (Col 22): Admin = W - (W / 1.06)
+      const adminTopDown = pvTotalMercadoNeto - (pvTotalMercadoNeto / (1 + adminRate));
+      row.getCell(22).value = { formula: `W${r}-(W${r}/${1 + adminRate})`, result: adminTopDown };
+
+      // S, T, U se calculan desde sus costos
+      row.getCell(19).value = { formula: `N${r}/0.70`, result: item.logAsignada / 0.70 };
+      row.getCell(20).value = { formula: `O${r}/0.70`, result: item.impAsignado / 0.70 };
+      row.getCell(21).value = { formula: `P${r}`, result: item.ssmaAsignado || 0 };
+
+      // R (Col 18): Servicio = W - (S + T + U + V) -> INGENIER?A INVERSA
+      const pvLog = item.logAsignada / 0.70;
+      const pvImp = item.impAsignado / 0.70;
+      const pvSSMA = item.ssmaAsignado || 0;
+      const pvServicio = pvTotalMercadoNeto - pvLog - pvImp - pvSSMA - adminTopDown;
+      row.getCell(18).value = { formula: `W${r}-S${r}-T${r}-U${r}-V${r}`, result: pvServicio };
     } else {
-      pvServicio = item.subtotalDirectoTotal / divServ;
-      pvLog = item.logAsignada / 0.70;
-      pvImp = item.impAsignado / 0.70;
-      pvSSMA = item.ssmaAsignado || 0;  // SSMA al costo, sin markup extra
-      pvAdmin = item.adminAsignado || 0;
+      // NORMAL: El precio se construye desde el costo hacia adelante.
+      row.getCell(18).value = { formula: `M${r}/${divServ}`, result: item.subtotalDirectoTotal / divServ };
+      row.getCell(19).value = { formula: `N${r}/0.70`, result: item.logAsignada / 0.70 };
+      row.getCell(20).value = { formula: `O${r}/0.70`, result: item.impAsignado / 0.70 };
+      row.getCell(21).value = { formula: `P${r}`, result: item.ssmaAsignado || 0 };
+
+      // V (Col 22): Admin = 6% de la suma de los PV anteriores
+      const pvServicio = item.subtotalDirectoTotal / divServ;
+      const pvLog = item.logAsignada / 0.70;
+      const pvImp = item.impAsignado / 0.70;
+      const pvSSMA = item.ssmaAsignado || 0;
+      const adminNormal = (pvServicio + pvLog + pvImp + pvSSMA) * adminRate;
+      row.getCell(22).value = { formula: `(R${r}+S${r}+T${r}+U${r})*${adminRate}`, result: adminNormal };
+
+      // W (Col 23): PV Neto = R + S + T + U + V
+      const pvNetoNormal = pvServicio + pvLog + pvImp + pvSSMA + adminNormal;
+      row.getCell(23).value = { formula: `R${r}+S${r}+T${r}+U${r}+V${r}`, result: pvNetoNormal };
     }
-    row.getCell(18).value = { formula: `M${r}/${divServ}`, result: pvServicio };
-    row.getCell(19).value = { formula: `N${r}/0.70`, result: pvLog };
-    row.getCell(20).value = { formula: `O${r}/0.70`, result: pvImp };
-    row.getCell(21).value = { formula: `P${r}`, result: pvSSMA };
-    // Col W = PV Neto total: R+S+T+U+V (V=admin absorbido en precio)
-    const _pvNeto = pvServicio + pvLog + pvImp + pvSSMA + pvAdmin;
-    row.getCell(23).value = { formula: `R${r}+S${r}+T${r}+U${r}+V${r}`, result: _pvNeto };
-    // Blended: Utilidad = W - Q, Margen = X/W
-    // Q (col 17) = M+N+O+P+V = directo+log_costo+imp_costo+ssma_costo+admin_costo
-    const _costoRealItem = item.subtotalDirectoTotal + item.logAsignada + item.impAsignado + (item.ssmaAsignado || 0) + pvAdmin;
-    const _utilidad = _pvNeto - _costoRealItem;
-    const _margenBlended = _pvNeto > 0 ? _utilidad / _pvNeto : 0;
-    row.getCell(24).value = { formula: `W${r}-Q${r}`, result: _utilidad };
-    row.getCell(25).value = { formula: `X${r}/W${r}`, result: _margenBlended };
-    row.getCell(26).value = item.precioVentaConIVA;
+
+    // Q (Col 17): Costo Total Real = M + N + O + P + V
+    // NOTA: El costo admin real (V) est absorbido en el PV, por lo que su costo es igual a V.
+    const adminParaCosto = row.getCell(22).value.result || row.getCell(22).value;
+    const costoRealItem = item.subtotalDirectoTotal + item.logAsignada + item.impAsignado + (item.ssmaAsignado || 0) + adminParaCosto;
+    row.getCell(17).value = { formula: `M${r}+N${r}+O${r}+P${r}+V${r}`, result: costoRealItem };
+
+    // X (Col 24): Utilidad = W - Q
+    const pvNetoFinal = row.getCell(23).value.result || row.getCell(23).value;
+    const utilidadFinal = pvNetoFinal - costoRealItem;
+    row.getCell(24).value = { formula: `W${r}-Q${r}`, result: utilidadFinal };
+
+    // Y (Col 25): Margen Blended = X / W
+    const blendedFinal = pvNetoFinal > 0 ? (utilidadFinal / pvNetoFinal) : 0;
+    row.getCell(25).value = { formula: `X${r}/W${r}`, result: blendedFinal };
+
+    // Z (Col 26): Precio con IVA = W * 1.10
+    row.getCell(26).value = { formula: `W${r}*1.10`, result: pvNetoFinal * 1.10 };
 
     [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 26].forEach(col => row.getCell(col).numFmt = moneyFormat);
     row.getCell(25).numFmt = percentFormat;
