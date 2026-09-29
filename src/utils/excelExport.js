@@ -801,7 +801,7 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
 
     row.getCell(12).value = { formula: `G${r}+H${r}+I${r}+J${r}+K${r}`, result: item.subtotalDirectoUnit };
     row.getCell(13).value = { formula: `D${r}*L${r}`, result: item.subtotalDirectoTotal };
-    row.getCell(17).value = { formula: `M${r}+N${r}+O${r}+P${r}`, result: item.subtotalDirectoTotal + item.logAsignada + item.impAsignado + (item.ssmaAsignado || 0) };
+    row.getCell(17).value = { formula: `M${r}+N${r}+O${r}+P${r}+V${r}`, result: item.subtotalDirectoTotal + item.logAsignada + item.impAsignado + (item.ssmaAsignado || 0) + (item.adminAsignado || 0) };
     
     const divServ = Math.max(0.01, 1 - Math.min(0.99, item.margen));
     row.getCell(18).value = { formula: `M${r}/${divServ}`, result: item.subtotalDirectoTotal / divServ };
@@ -851,7 +851,7 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
     totalRow3.getCell(14).value = { formula: `SUM(N${startRowSSTTAudit}:N${endRowSSTTAudit})`, result: sumSSTTLog };
     totalRow3.getCell(15).value = { formula: `SUM(O${startRowSSTTAudit}:O${endRowSSTTAudit})`, result: sumSSTTImp };
     totalRow3.getCell(16).value = { formula: `SUM(P${startRowSSTTAudit}:P${endRowSSTTAudit})`, result: sumSSTTSSMA };
-    totalRow3.getCell(17).value = { formula: `SUM(Q${startRowSSTTAudit}:Q${endRowSSTTAudit})`, result: sumSSTTSubDirectoTotal + sumSSTTLog + sumSSTTImp + sumSSTTSSMA };
+    totalRow3.getCell(17).value = { formula: `SUM(Q${startRowSSTTAudit}:Q${endRowSSTTAudit})`, result: sumSSTTSubDirectoTotal + sumSSTTLog + sumSSTTImp + sumSSTTSSMA + sumSSTTAdmin };
     totalRow3.getCell(18).value = { formula: `SUM(R${startRowSSTTAudit}:R${endRowSSTTAudit})`, result: sumSSTTCostoReal };
     totalRow3.getCell(19).value = { formula: `SUM(S${startRowSSTTAudit}:S${endRowSSTTAudit})`, result: sumSSTTLog / 0.70 };
     totalRow3.getCell(20).value = { formula: `SUM(T${startRowSSTTAudit}:T${endRowSSTTAudit})`, result: sumSSTTImp / 0.70 };
