@@ -820,12 +820,12 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
       // S, T, U se calculan desde sus costos
       row.getCell(19).value = { formula: `N${r}/0.70`, result: item.logAsignada / 0.70 };
       row.getCell(20).value = { formula: `O${r}/0.70`, result: item.impAsignado / 0.70 };
-      row.getCell(21).value = { formula: `P${r}`, result: item.ssmaAsignado || 0 };
+      row.getCell(21).value = { formula: `P${r}/0.70`, result: (item.ssmaAsignado || 0) / 0.70 };
 
       // R (Col 18): Servicio = W - (S + T + U + V) -> INGENIER?A INVERSA
       const pvLog = item.logAsignada / 0.70;
       const pvImp = item.impAsignado / 0.70;
-      const pvSSMA = item.ssmaAsignado || 0;
+      const pvSSMA = (item.ssmaAsignado || 0) / 0.70;
       const pvServicio = pvTotalMercadoNeto - pvLog - pvImp - pvSSMA - adminTopDown;
       row.getCell(18).value = { formula: `W${r}-S${r}-T${r}-U${r}-V${r}`, result: pvServicio };
     } else {
@@ -833,13 +833,13 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
       row.getCell(18).value = { formula: `M${r}/${divServ}`, result: item.subtotalDirectoTotal / divServ };
       row.getCell(19).value = { formula: `N${r}/0.70`, result: item.logAsignada / 0.70 };
       row.getCell(20).value = { formula: `O${r}/0.70`, result: item.impAsignado / 0.70 };
-      row.getCell(21).value = { formula: `P${r}`, result: item.ssmaAsignado || 0 };
+      row.getCell(21).value = { formula: `P${r}/0.70`, result: (item.ssmaAsignado || 0) / 0.70 };
 
       // V (Col 22): Admin = 6% de la suma de los PV anteriores
       const pvServicio = item.subtotalDirectoTotal / divServ;
       const pvLog = item.logAsignada / 0.70;
       const pvImp = item.impAsignado / 0.70;
-      const pvSSMA = item.ssmaAsignado || 0;
+      const pvSSMA = (item.ssmaAsignado || 0) / 0.70;
       const adminNormal = (pvServicio + pvLog + pvImp + pvSSMA) * adminRate;
       row.getCell(22).value = { formula: `(R${r}+S${r}+T${r}+U${r})*${adminRate}`, result: adminNormal };
 
