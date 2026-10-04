@@ -315,7 +315,9 @@ export const calcularCotizacionActiva = (cotizacion) => {
     }
 
     // PASO 2: Subtotal antes de Gastos Adm. y Financieros
-    const subtotal_antes_admin = precio_servicio_total + cuota_log_pv + cuota_imp_pv + ssmaAsignado;
+    // Cuota de SSMA con margen (divisor 0.70)
+    const cuota_ssma_pv = ssmaAsignado > 0 ? (ssmaAsignado / 0.70) : 0;
+    const subtotal_antes_admin = precio_servicio_total + cuota_log_pv + cuota_imp_pv + cuota_ssma_pv;
 
     // PASO 3: Gastos Administrativos y Financieros (% sobre P.Venta — aplicado al precio)
     const cuota_admin_total = subtotal_antes_admin * gastosAdminRate;
@@ -328,7 +330,8 @@ export const calcularCotizacionActiva = (cotizacion) => {
     const ganancia_servicio = precio_servicio_total - item.Costo_Directo_Total_Item;
     const ganancia_log_item = cuota_log_pv - cuota_log_costo;
     const ganancia_imp_item = cuota_imp_pv - cuota_imp_costo;
-    const utilidad_total_item = ganancia_servicio + ganancia_log_item + ganancia_imp_item;
+    const ganancia_ssma_item = (typeof cuota_ssma_pv !== "undefined" ? cuota_ssma_pv : 0) - ssmaAsignado;
+    const utilidad_total_item = ganancia_servicio + ganancia_log_item + ganancia_imp_item + ganancia_ssma_item;
     const utilidad_neta_unitaria = qty > 0 ? (utilidad_total_item / qty) : 0;
 
     if (item.isTercerizado) {

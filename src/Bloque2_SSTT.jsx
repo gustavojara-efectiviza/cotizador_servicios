@@ -51,7 +51,7 @@ function Bloque2_SSTT({
   const [tension, setTension] = useState('500 kV');
   const [equipo, setEquipo] = useState('');
   const [cantidad, setCantidad] = useState(1);
-  const [activeTab, setActiveTab] = useState('cotizador');
+  const [activeTab, setActiveTab] = useState('carrito'); // 'carrito' | 'logistica'
 
   // Estado para Buscador Capa 2 (Catálogo a la Carta con datalist)
   const [searchQuery, setSearchQuery] = useState('');
@@ -193,7 +193,7 @@ function Bloque2_SSTT({
     };
     setCart(prev => [...prev, newItem]);
     setIsDirty(true);
-    showFeedbackToast('➕ Ítem manual agregado al carrito.');
+    showFeedbackToast('Ítem manual agregado al carrito.');
   };
 
   // Edición Inline directa de descripción y costo
@@ -343,7 +343,7 @@ function Bloque2_SSTT({
     setSearchQuery('');
     setSearchCantidad(1);
     setIsDirty(true);
-    showFeedbackToast(`✅ ${qty}x ${newItem.equipo} agregado.`);
+    showFeedbackToast(`${qty}x ${newItem.equipo} agregado.`);
   };
 
   // ============================================================================
@@ -354,14 +354,14 @@ function Bloque2_SSTT({
     const itemsMacro = buildMacroPaqueteTrafo(30);
     setCart(prev => [...prev, ...itemsMacro]);
     setIsDirty(true);
-    showFeedbackToast(`⚡ Paquete Mantenimiento Trafo inyectado (${itemsMacro.length} ítems).`);
+    showFeedbackToast(`Paquete Mantenimiento Trafo inyectado (${itemsMacro.length} ítems).`);
   };
 
   const handleInjectMacroPCPCompleto = () => {
     const itemsMacro = buildMacroPCPCompleto(30);
     setCart(prev => [...prev, ...itemsMacro]);
     setIsDirty(true);
-    showFeedbackToast(`⚡ Mantenimiento Integral PCP (${itemsMacro.length} ítems) inyectado.`);
+    showFeedbackToast(`Mantenimiento Integral PCP (${itemsMacro.length} ítems) inyectado.`);
   };
 
   const handleAdd = () => {
@@ -440,9 +440,9 @@ function Bloque2_SSTT({
 
     if (needsPriceReview) {
       // Toast de advertencia con instrucción clara — no bloquea el flujo
-      showFeedbackToast(`⚠️ ${item.equipo} no está en el catálogo. Costo en Gs. 0 — revisá el precio en el modal de edición antes de cotizar.`);
+      showFeedbackToast(`${item.equipo} no está en el catálogo. Costo en Gs. 0 — revisá el precio en el modal de edición antes de cotizar.`);
     } else {
-      showFeedbackToast(`✅ ${item.cantidad}x ${item.equipo} (${item.tension}) agregado al carrito.`);
+      showFeedbackToast(`${item.cantidad}x ${item.equipo} (${item.tension}) agregado al carrito.`);
     }
   };
 
@@ -515,7 +515,7 @@ function Bloque2_SSTT({
 
   const handleSaveAdHoc = async () => {
     if (!adHocState.equipo) {
-      showFeedbackToast('⚠️ Ingresá un nombre para el equipo antes de guardar.');
+      showFeedbackToast('Ingresá un nombre para el equipo antes de guardar.');
       return;
     }
     
@@ -923,7 +923,7 @@ function Bloque2_SSTT({
                               onChange={(e) => setOverrideState({...overrideState, incluye_en_logistica: e.target.checked})}
                               style={{ width: '16px', height: '16px', accentColor: '#0284c7' }}
                             />
-                            <span style={{ color: '#0284c7', fontWeight: 600 }}>🚚 Incluir en prorrateo de logística</span>
+                            <span style={{ color: '#0284c7', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}><Truck size={14} /> Incluir en prorrateo de logística</span>
                             <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>(default: NO)</span>
                           </label>
                         </td>
@@ -1259,7 +1259,7 @@ function Bloque2_SSTT({
                             onChange={e => setAdHocState({...adHocState, incluye_en_logistica: e.target.checked})}
                             style={{ width: '15px', height: '15px', accentColor: '#0284c7' }}
                           />
-                          <span style={{ color: '#0284c7', fontWeight: 600 }}>🚚 Incluir en prorrateo de logística</span>
+                          <span style={{ color: '#0284c7', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}><Truck size={14} /> Incluir en prorrateo de logística</span>
                         </label>
                       </td>
                     </tr>
@@ -1320,706 +1320,596 @@ function Bloque2_SSTT({
 
       <main className="main-content" style={{ display: 'grid', gridTemplateColumns: '7fr 5fr', gap: '30px', alignItems: 'start' }}>
         
-        {/* COLUMNA IZQUIERDA: MESA DE TRABAJO (60%) */}
-        <div className="left-panel" style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+        {/* COLUMNA IZQUIERDA: MESA DE TRABAJO (60-70%) */}
+        <div className="left-panel flex flex-col gap-5">
           
-          {/* 1. Datos del Proyecto */}
-          <div className="odoo-card" style={{ borderLeft: '4px solid #2563eb' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h2 style={{ margin: 0 }}><FileText size={20} /> Datos del Proyecto</h2>
-            </div>
-            
-            <div className="config-grid">
-              <div className="form-group">
-                <label>Cliente / Empresa (Configurado en Bloque 0)</label>
-                <input type="text" value={nombreCliente} readOnly style={{ background: '#f8fafc', color: '#64748b' }} />
-              </div>
-              <div className="form-group">
-                <label>Nombre del Proyecto (Configurado en Bloque 0)</label>
-                <input type="text" value={nombreProyecto} readOnly style={{ background: '#f8fafc', color: '#64748b' }} />
-              </div>
-            </div>
+          {/* NAVEGACIÓN DE PESTAÑAS INTERNAS (Segmented Control / Material Tabs) */}
+          <div className="flex bg-slate-100 p-1 rounded-t-xl border border-slate-200 border-b-0 w-max mb-[-1px] relative z-10">
+            <button
+              type="button"
+              onClick={() => setActiveTab('carrito')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all cursor-pointer ${
+                activeTab === 'carrito'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+              }`}
+            >
+              <Calculator size={16} />
+              <span>Carrito Técnico y Ensayos</span>
+              <span className={`text-xs px-2 py-0.5 rounded-md font-bold ${
+                activeTab === 'carrito' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-500'
+              }`}>
+                {cart.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('logistica')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all cursor-pointer ${
+                activeTab === 'logistica'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+              }`}
+            >
+              <Truck size={16} />
+              <span>Logística e Indirectos</span>
+              {activeAplicarIndirectos && (
+                <span className="text-xs px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 font-bold">
+                  {distanciaKm} km
+                </span>
+              )}
+            </button>
           </div>
 
-          {/* 2. Carrito Técnico & Mesa de Selección Rápida (3 Capas) */}
-          <div className="odoo-card" style={{ position: 'relative', borderLeft: '4px solid #3b82f6' }}>
-            
-            {/* Header con Acciones Principales */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Calculator size={22} color="#3b82f6" />
-                <div>
-                  <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Carrito Técnico & Selección Rápida</h2>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Sistema de 3 Capas: Macros, Catálogo a la Carta e Ingreso Manual</span>
+          {/* TAB 1: CARRITO TÉCNICO Y ENSAYOS */}
+          {activeTab === 'carrito' && (
+            <div className="bg-white border border-slate-200 shadow-sm rounded-xl rounded-tl-none overflow-hidden p-6 relative">
+              
+              {/* Header con Acciones Principales */}
+              <div className="flex justify-between items-center mb-5 flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+                    <Calculator size={20} />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900 m-0">Carrito Técnico & Selección Rápida</h2>
+                    <span className="text-xs text-slate-500">Sistema de 3 Capas: Macros, Catálogo a la Carta e Ingreso Manual</span>
+                  </div>
                 </div>
-              </div>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button 
-                  type="button"
-                  className="primary-btn" 
-                  onClick={handleAddManualItem} 
-                  style={{ width: 'auto', padding: '7px 14px', background: '#059669', fontSize: '0.85rem', fontWeight: 600 }}
-                  title="Agregar una partida libre donde puedes tipear descripción y costo unitario pactado"
-                >
-                  <Plus size={16} /> + Ítem Manual / Partida Global
-                </button>
-                <button 
-                  type="button"
-                  className="primary-btn" 
-                  onClick={() => setShowCatalogModal(true)} 
-                  style={{ width: 'auto', padding: '7px 14px', background: '#3b82f6', fontSize: '0.85rem' }}
-                  title="Abrir configurador visual por diagrama unifilar"
-                >
-                  <Layout size={16} /> Unifilar
-                </button>
-                <button 
-                  type="button"
-                  className="primary-btn" 
-                  onClick={() => setShowAdHocModal(true)} 
-                  style={{ width: 'auto', padding: '7px 14px', background: '#6366f1', fontSize: '0.85rem' }}
-                  title="Crear ítem con configuración completa y opción de guardar en Firestore"
-                >
-                  <PackagePlus size={16} /> Ítem Ad-Hoc
-                </button>
-              </div>
-            </div>
-
-            {/* TOAST FEEDBACK NOTIFICATION */}
-            {toastMsg && (
-              <div style={{
-                position: 'absolute',
-                top: '12px',
-                right: '20px',
-                background: '#1e293b',
-                color: '#38bdf8',
-                padding: '8px 16px',
-                borderRadius: '8px',
-                fontSize: '0.85rem',
-                fontWeight: '600',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                zIndex: 10,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <Sparkles size={16} /> {toastMsg}
-              </div>
-            )}
-
-            {/* ========================================================================= */}
-            {/* CAPA 3: BARRA DE PLANTILLAS RÁPIDAS (MACROS FRONT-END) */}
-            {/* ========================================================================= */}
-            <div style={{
-              background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
-              border: '1px solid #ddd6fe',
-              borderRadius: '10px',
-              padding: '12px 16px',
-              marginBottom: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '12px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Zap size={18} color="#7c3aed" />
-                <div>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#5b21b6', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    Plantillas Rápidas
-                  </span>
-                  <span style={{ display: 'block', fontSize: '0.75rem', color: '#6d28d9' }}>
-                    Inyección masiva de paquetes técnicos directo al estado React
-                  </span>
+                <div className="flex gap-2 flex-wrap">
+                  <button 
+                    type="button"
+                    onClick={handleAddManualItem} 
+                    className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-3 py-2 rounded-lg text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+                    title="Agregar una partida libre donde puedes tipear descripción y costo unitario pactado"
+                  >
+                    <Plus size={14} className="text-slate-500" /> + Ítem Manual
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setShowCatalogModal(true)} 
+                    className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-3 py-2 rounded-lg text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+                    title="Abrir configurador visual por diagrama unifilar"
+                  >
+                    <Layout size={14} className="text-slate-500" /> Unifilar
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setShowAdHocModal(true)} 
+                    className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-3 py-2 rounded-lg text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+                    title="Crear ítem con configuración completa y opción de guardar en Firestore"
+                  >
+                    <PackagePlus size={14} className="text-slate-500" /> Ítem Ad-Hoc
+                  </button>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {/* BOTÓN MACRO PRINCIPAL SOLICITADO */}
-                <button
-                  type="button"
-                  onClick={handleInjectMacroPaqueteTrafo}
-                  style={{
-                    background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
-                    color: '#ffffff',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '8px 14px',
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    boxShadow: '0 2px 6px rgba(124, 58, 237, 0.3)',
-                    transition: 'all 0.15s ease'
-                  }}
-                  title="Inyecta 1x Ensayo Físico-Químico, 1x Cromatografía y 1x Extracción de Muestra de Aceite"
-                >
-                  <Zap size={15} color="#fef08a" /> ⚡ Paquete Mantenimiento Trafo
-                </button>
-
-                {/* MACRO COMPLEMENTARIO PCP 5 PUNTOS */}
-                <button
-                  type="button"
-                  onClick={handleInjectMacroPCPCompleto}
-                  style={{
-                    background: '#ffffff',
-                    color: '#7c3aed',
-                    border: '1px solid #c4b5fd',
-                    borderRadius: '8px',
-                    padding: '8px 12px',
-                    fontSize: '0.8rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px'
-                  }}
-                  title="Inyecta los 5 puntos del PCP: Ensayos, Cromatografía, Limpiezas, Pruebas y Toma de Muestra"
-                >
-                  <Sparkles size={14} color="#7c3aed" /> ⚡ Mantenimiento Integral PCP (5 Ptos)
-                </button>
-              </div>
-            </div>
-
-            {/* ========================================================================= */}
-            {/* CAPA 2: CATÁLOGO A LA CARTA (Buscador <datalist>) */}
-            {/* ========================================================================= */}
-            <div style={{
-              background: '#f8fafc',
-              border: '1px solid var(--border-color)',
-              borderRadius: '10px',
-              padding: '12px 16px',
-              marginBottom: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              flexWrap: 'wrap'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569', minWidth: '110px' }}>
-                <Search size={16} color="#3b82f6" />
-                <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>A la Carta:</span>
-              </div>
-
-              <div style={{ flex: 1, minWidth: '220px', position: 'relative' }}>
-                <input
-                  type="text"
-                  list="sstt-catalog-datalist"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddFromDatalist();
-                    }
-                  }}
-                  placeholder="🔍 Busca: Ensayo Físico-Químico, Cromatografía, Aceite Dieléctrico..."
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '0.85rem',
-                    background: '#ffffff',
-                    color: 'var(--text-primary)'
-                  }}
-                />
-                <datalist id="sstt-catalog-datalist">
-                  <option value="Ensayo Físico - Químico de aceite aislante según normas ASTM y IEC" />
-                  <option value="Análisis de gases disueltos por cromatografía" />
-                  <option value="Extracción de muestra de aceite mineral aislante para ensayo" />
-                  <option value="Limpiezas, mantenimientos, ajustes y controles de Trafo" />
-                  <option value="Mediciones, verificaciones y pruebas eléctricas de Trafo" />
-                  <option value="Tratamiento y Termovacío de Aceite Dieléctrico en Trafo" />
-                  <option value="Suministro de Aceite Dieléctrico Mineral (Tambor 200L)" />
-                  <option value="Inspección Termográfica Infrarroja de Subestación" />
-                  {catalogoSugerencias.dbItems.map((dbIt, idx) => (
-                    <option key={`db-${idx}`} value={dbIt.label} />
-                  ))}
-                </datalist>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Cant:</span>
-                  <input
-                    type="number"
-                    min="1"
-                    value={searchCantidad}
-                    onChange={(e) => setSearchCantidad(e.target.value)}
-                    style={{ width: '50px', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem', textAlign: 'center' }}
-                  />
+              {/* TOAST FEEDBACK NOTIFICATION */}
+              {toastMsg && (
+                <div className="absolute top-3 right-5 bg-slate-900 text-sky-400 px-4 py-2 rounded-lg text-xs font-semibold shadow-lg z-10 flex items-center gap-2 animate-fade-in">
+                  <Sparkles size={15} /> {toastMsg}
                 </div>
-                <button
-                  type="button"
-                  onClick={handleAddFromDatalist}
-                  disabled={!searchQuery.trim()}
-                  style={{
-                    padding: '8px 14px',
-                    background: searchQuery.trim() ? '#3b82f6' : '#94a3b8',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: 700,
-                    fontSize: '0.85rem',
-                    cursor: searchQuery.trim() ? 'pointer' : 'not-allowed',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <Plus size={15} /> Agregar
-                </button>
-              </div>
-            </div>
-
-            {/* ========================================================================= */}
-            {/* LISTA DEL CARRITO TÉCNICO (CON EDICIÓN INLINE CAPA 1) */}
-            {/* ========================================================================= */}
-            <div style={{ maxHeight: '48vh', overflowY: 'auto', paddingRight: '5px' }}>
-              {resultadosCalculados.equiposProcesados.length === 0 ? (
-                <div style={{ padding: '40px 20px', textAlign: 'center', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-                  <PackagePlus size={36} color="#94a3b8" style={{ marginBottom: '10px' }} />
-                  <p style={{ color: 'var(--text-secondary)', margin: '0 0 10px 0', fontWeight: 600 }}>El carrito está vacío.</p>
-                  <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0 }}>
-                    Usa <strong>⚡ Paquete Mantenimiento Trafo</strong>, el buscador <strong>A la Carta</strong> o <strong>+ Ítem Manual</strong> para comenzar.
-                  </p>
-                </div>
-              ) : (
-                resultadosCalculados.equiposProcesados.map((item, index) => {
-                  const isTerc = item.overrides?.is_tercerizado;
-                  const costoDirecto = isTerc ? (item.overrides?.costo_total_base ?? item.baseData?.costo_total_base ?? 0) : item.costo_directo_unitario;
-
-                  return (
-                    <div 
-                      key={item.id || index} 
-                      className="cart-item" 
-                      style={{ 
-                        borderLeft: `4px solid ${isTerc ? '#a855f7' : 'var(--accent)'}`, 
-                        background: '#ffffff', 
-                        padding: '14px 16px', 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'space-between', 
-                        borderBottom: '1px solid var(--border-color)', 
-                        marginBottom: '0', 
-                        borderRadius: '0',
-                        gap: '12px'
-                      }}
-                    >
-                      {/* Cantidad & Descripción */}
-                      <div className="cart-item-details" style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-                          <input 
-                            type="number" 
-                            value={item.cantidad} 
-                            min="1"
-                            onChange={(e) => updateQuantity(item.id, e.target.value)}
-                            style={{ width: '52px', padding: '5px', borderRadius: '4px', textAlign: 'center', fontWeight: 'bold' }}
-                            title="Cantidad de unidades"
-                          />
-                          
-                          {/* Input de descripción editable inline */}
-                          <input
-                            type="text"
-                            value={item.equipo}
-                            onChange={(e) => updateItemName(item.id, e.target.value)}
-                            style={{
-                              flex: 1,
-                              border: item.needsPriceReview ? '1px solid #f97316' : '1px solid transparent',
-                              background: item.needsPriceReview ? '#fff7ed' : 'transparent',
-                              fontWeight: 700,
-                              fontSize: '0.95rem',
-                              color: item.needsPriceReview ? '#c2410c' : 'var(--text-primary)',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              transition: 'border 0.2s',
-                              textOverflow: 'ellipsis'
-                            }}
-                            onFocus={(e) => e.target.style.border = '1px solid #94a3b8'}
-                            onBlur={(e) => e.target.style.border = item.needsPriceReview ? '1px solid #f97316' : '1px solid transparent'}
-                            title="Haz clic para editar la descripción"
-                          />
-
-                          {/* Badges */}
-                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                            {isTerc && (
-                              <span style={{ fontSize: '0.68rem', background: '#a855f7', color: 'white', padding: '2px 7px', borderRadius: '10px', fontWeight: 600 }}>
-                                {item.overrides?.modo_subcontrato === 'jornal'
-                                  ? `Jornal (${(item.overrides.sub_esp_cant || 0) + (item.overrides.sub_aux_cant || 0)}p)`
-                                  : 'SSTT Flat'}
-                              </span>
-                            )}
-                            {item.overrides?.top_down_enabled && (
-                              <span style={{ fontSize: '0.68rem', background: '#10b981', color: 'white', padding: '2px 7px', borderRadius: '10px', fontWeight: 600 }}>Top-Down</span>
-                            )}
-                            {item.overrides?.modoUso === 'Reserva' && (
-                              <span style={{ fontSize: '0.68rem', background: '#3b82f6', color: 'white', padding: '2px 7px', borderRadius: '10px', fontWeight: 600 }}>Reserva</span>
-                            )}
-                            {isItemModified(item) && (
-                              <span style={{ fontSize: '0.68rem', background: '#f59e0b', color: 'white', padding: '2px 7px', borderRadius: '10px', fontWeight: 600 }}>Modificado</span>
-                            )}
-                            {item.needsPriceReview && (
-                              <span style={{ fontSize: '0.68rem', background: '#ea580c', color: 'white', padding: '2px 7px', borderRadius: '10px', fontWeight: 700, animation: 'pulse 1.5s infinite' }}
-                                title="Este ítem no está en el catálogo. El costo es Gs. 0 — abrí el modal de edición para ajustar el precio antes de enviar la cotización.">
-                                ⚠️ COSTO PENDIENTE
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Fila de Tensión y Costo Unitario Pactado */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', fontSize: '0.82rem', color: '#64748b' }}>
-                          <span>{item.tension || 'N/A'}</span>
-                          <span>•</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span>Costo Unit. Pactado:</span>
-                            <input
-                              type="number"
-                              value={costoDirecto}
-                              onChange={(e) => updateItemCosto(item.id, e.target.value)}
-                              style={{
-                                width: '110px',
-                                padding: '3px 6px',
-                                fontSize: '0.8rem',
-                                borderRadius: '4px',
-                                border: '1px solid #cbd5e1',
-                                background: '#f8fafc',
-                                fontWeight: 600,
-                                color: '#334155'
-                              }}
-                              title="Costo unitario directo o de subcontratista pactado (Gs.)"
-                            />
-                            <span>Gs.</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Total y Acciones */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ textAlign: 'right' }}>
-                          <span style={{ display: 'block', fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-                            {formatGs(item.precio_total_final)}
-                          </span>
-                          <span style={{ fontSize: '0.72rem', color: '#64748b' }}>P. Venta Total</span>
-                        </div>
-                        <button 
-                          type="button"
-                          className="primary-btn" 
-                          onClick={() => openEditModal(item)} 
-                          style={{ padding: '7px 9px', width: 'auto', background: '#f8fafc', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px' }} 
-                          title="Configuración avanzada / Override"
-                        >
-                          <Edit2 size={15} />
-                        </button>
-                        <button 
-                          type="button"
-                          className="remove-btn" 
-                          onClick={() => removeItem(item.id)} 
-                          style={{ padding: '7px 9px', borderRadius: '6px' }}
-                          title="Eliminar del carrito"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
               )}
-            </div>
 
-            {/* FOOTER DEL CARRITO: TOGGLE PROVISIÓN SSMA Y CONSUMIBLES (5% PARETO) */}
-            <div style={{
-              marginTop: '16px',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              border: activeAplicarSSMA ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
-              background: activeAplicarSSMA ? 'rgba(16, 185, 129, 0.06)' : '#f8fafc',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '12px',
-              transition: 'all 0.25s ease'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <ShieldCheck size={22} color={activeAplicarSSMA ? '#059669' : '#94a3b8'} />
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <strong style={{ fontSize: '0.92rem', color: activeAplicarSSMA ? '#065f46' : '#64748b' }}>
-                      Aplicar Provisión Estándar de SSMA y Consumibles
-                    </strong>
-                    <span style={{
-                      fontSize: '0.72rem',
-                      background: activeAplicarSSMA ? '#d1fae5' : '#e2e8f0',
-                      color: activeAplicarSSMA ? '#047857' : '#64748b',
-                      padding: '2px 8px',
-                      borderRadius: '12px',
-                      fontWeight: 700
-                    }}>
-                      5% Pareto
+              {/* ========================================================================= */}
+              {/* CAPA 3: BARRA DE PLANTILLAS RÁPIDAS (MACROS FRONT-END) */}
+              {/* ========================================================================= */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 mb-4 flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-md bg-slate-200/70 flex items-center justify-center text-slate-700">
+                    <Zap size={15} />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
+                      Plantillas Rápidas
+                    </span>
+                    <span className="text-[11px] text-slate-500 block">
+                      Inyección masiva de paquetes técnicos directo al estado
                     </span>
                   </div>
-                  <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', marginTop: '2px' }}>
-                    {activeAplicarSSMA
-                      ? `EPP, guantes, trapos y seguridad industrial calculados automáticamente (${formatGs(resultadosCalculados?.Costo_SSMA_Consumibles || 0)})`
-                      : 'Provisión desactivada (0 Gs.)'}
-                  </span>
+                </div>
+
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleInjectMacroPaqueteTrafo}
+                    className="bg-slate-800 hover:bg-slate-700 text-white shadow-sm rounded-lg text-xs font-semibold px-3.5 py-2 flex items-center gap-1.5 transition-all cursor-pointer"
+                    title="Inyecta 1x Ensayo Físico-Químico, 1x Cromatografía y 1x Extracción de Muestra de Aceite"
+                  >
+                    <Zap size={14} className="text-amber-400" /> Paquete Mantenimiento Trafo
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleInjectMacroPCPCompleto}
+                    className="bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 shadow-sm rounded-lg text-xs font-semibold px-3 py-2 flex items-center gap-1.5 transition-all cursor-pointer"
+                    title="Inyecta los 5 puntos del PCP: Ensayos, Cromatografía, Limpiezas, Pruebas y Toma de Muestra"
+                  >
+                    <Sparkles size={14} className="text-slate-500" /> Mantenimiento Integral PCP (5 Ptos)
+                  </button>
                 </div>
               </div>
 
-              {/* SWITCH / TOGGLE */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                {activeAplicarSSMA && (
-                  <span style={{ fontSize: '0.95rem', fontWeight: 800, color: '#059669' }}>
-                    +{formatGs(resultadosCalculados?.Costo_SSMA_Consumibles || 0)}
-                  </span>
-                )}
-                <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', margin: 0, cursor: 'pointer' }}>
+              {/* ========================================================================= */}
+              {/* CAPA 2: CATÁLOGO A LA CARTA (Buscador <datalist>) */}
+              {/* ========================================================================= */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-4 flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2 text-slate-600 text-xs font-bold shrink-0">
+                  <Search size={15} className="text-slate-500" />
+                  <span>A la Carta:</span>
+                </div>
+
+                <div className="flex-1 min-w-[200px] relative">
                   <input
-                    type="checkbox"
-                    checked={activeAplicarSSMA}
-                    onChange={(e) => {
-                      updateAplicarSSMA(e.target.checked);
-                      setIsDirty(true);
+                    type="text"
+                    list="sstt-catalog-datalist"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddFromDatalist();
+                      }
                     }}
-                    style={{ opacity: 0, width: 0, height: 0 }}
+                    placeholder="Busca: Ensayo Físico-Químico, Cromatografía, Aceite Dieléctrico..."
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 pl-8"
                   />
-                  <span style={{
-                    position: 'absolute',
-                    cursor: 'pointer',
-                    top: 0, left: 0, right: 0, bottom: 0,
-                    backgroundColor: activeAplicarSSMA ? '#10b981' : '#cbd5e1',
-                    transition: '0.3s',
-                    borderRadius: '24px'
-                  }}>
-                    <span style={{
-                      position: 'absolute',
-                      content: '""',
-                      height: '18px',
-                      width: '18px',
-                      left: activeAplicarSSMA ? '22px' : '3px',
-                      bottom: '3px',
-                      backgroundColor: 'white',
-                      transition: '0.3s',
-                      borderRadius: '50%',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                    }}></span>
-                  </span>
-                </label>
-              </div>
-            </div>
-
-          </div>
-
-          {/* 3. Operaciones y Riesgos (Centro de Gastos Indirectos) */}
-          <div className="odoo-card" style={{
-            borderLeft: activeAplicarIndirectos ? '4px solid var(--accent, #3b82f6)' : '4px solid #94a3b8',
-            transition: 'all 0.3s ease'
-          }}>
-            {/* Cabecera con Switch On/Off */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '18px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <ShieldAlert size={22} color={activeAplicarIndirectos ? '#2563eb' : '#64748b'} />
-                <div>
-                  <h2 style={{ margin: 0, fontSize: '1.15rem', color: activeAplicarIndirectos ? 'var(--text-primary)' : '#64748b' }}>
-                    Centro de Control de Gastos Indirectos
-                  </h2>
-                  <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                    {activeAplicarIndirectos ? 'Logística, viáticos, hospedaje e imprevistos calculados' : 'Desactivado (0 Gs / 0 USD para cotizaciones de terceros)'}
-                  </span>
+                  <Search size={14} className="text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <datalist id="sstt-catalog-datalist">
+                    <option value="Ensayo Físico - Químico de aceite aislante según normas ASTM y IEC" />
+                    <option value="Análisis de gases disueltos por cromatografía" />
+                    <option value="Extracción de muestra de aceite mineral aislante para ensayo" />
+                    <option value="Limpiezas, mantenimientos, ajustes y controles de Trafo" />
+                    <option value="Mediciones, verificaciones y pruebas eléctricas de Trafo" />
+                    <option value="Tratamiento y Termovacío de Aceite Dieléctrico en Trafo" />
+                    <option value="Suministro de Aceite Dieléctrico Mineral (Tambor 200L)" />
+                    <option value="Inspección Termográfica Infrarroja de Subestación" />
+                    {catalogoSugerencias.dbItems.map((dbIt, idx) => (
+                      <option key={`db-${idx}`} value={dbIt.label} />
+                    ))}
+                  </datalist>
                 </div>
-              </div>
 
-              {/* SWITCH / TOGGLE */}
-              <div style={{
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '10px', 
-                background: activeAplicarIndirectos ? '#eff6ff' : '#f1f5f9', 
-                padding: '6px 14px', 
-                borderRadius: '20px', 
-                border: activeAplicarIndirectos ? '1px solid #bfdbfe' : '1px solid #cbd5e1',
-                boxShadow: activeAplicarIndirectos ? '0 2px 6px rgba(37,99,235,0.1)' : 'none'
-              }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: activeAplicarIndirectos ? '#1e40af' : '#64748b' }}>
-                  {activeAplicarIndirectos ? '🟢 Gastos Indirectos Activos' : '⚪ Centro en Cero (Terceros)'}
-                </span>
-                <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', margin: 0, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={activeAplicarIndirectos}
-                    onChange={(e) => {
-                      updateAplicarIndirectos(e.target.checked);
-                      setIsDirty(true);
-                    }}
-                    style={{ opacity: 0, width: 0, height: 0 }}
-                  />
-                  <span style={{
-                    position: 'absolute',
-                    cursor: 'pointer',
-                    top: 0, left: 0, right: 0, bottom: 0,
-                    backgroundColor: activeAplicarIndirectos ? '#2563eb' : '#94a3b8',
-                    transition: '0.3s',
-                    borderRadius: '24px'
-                  }}>
-                    <span style={{
-                      position: 'absolute',
-                      content: '""',
-                      height: '18px',
-                      width: '18px',
-                      left: activeAplicarIndirectos ? '22px' : '3px',
-                      bottom: '3px',
-                      backgroundColor: 'white',
-                      transition: '0.3s',
-                      borderRadius: '50%',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                    }}></span>
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            {/* Banner explicativo cuando está en cero */}
-            {!activeAplicarIndirectos && (
-              <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ fontSize: '1.3rem' }}>💡</span>
-                <div style={{ fontSize: '0.85rem', color: '#475569', lineHeight: '1.4' }}>
-                  <strong>Modo Servicios Tercerizados / Sin Despliegue Propio:</strong> La logística, viáticos, hospedajes, peajes e imprevistos están anulados en <strong>0 Gs.</strong> para que el precio de venta refleje exactamente la cotización directa de terceros sin recargos operativos internos.
-                </div>
-              </div>
-            )}
-            
-            {/* Contenido condicionado con opacidad visual */}
-            <div style={{ opacity: activeAplicarIndirectos ? 1 : 0.45, pointerEvents: activeAplicarIndirectos ? 'auto' : 'none', transition: 'opacity 0.2s' }}>
-              {/* Parámetros Básicos */}
-              <div className="config-grid" style={{ marginBottom: '20px' }}>
-                <div className="form-group">
-                  <label>Distancia ida/vuelta (km)</label>
-                  <input type="number" min="0" value={distanciaKm} onChange={(e) => { setDistanciaKm(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
-                </div>
-                <div className="form-group">
-                  <label>Días Permitidos (Corte)</label>
-                  <input type="number" min="1" value={diasPermitidosCorte} onChange={(e) => { setDiasPermitidosCorte(parseInt(e.target.value) || 1); setIsDirty(true); }} />
-                </div>
-              </div>
-
-              <div className="form-group" style={{ marginBottom: '20px' }}>
-                <label>Condición de Trabajo / Ventana de Corte (Multiplicador de Riesgo)</label>
-                <select 
-                  value={condicionTrabajo} 
-                  onChange={(e) => { setCondicionTrabajo(parseFloat(e.target.value)); setIsDirty(true); }}
-                  style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--border-color)', fontWeight: 'bold' }}
-                >
-                  <option value={1.0}>Normal / Obra Nueva (1.0x)</option>
-                  <option value={1.2}>Ventana Nocturna Estándar (1.2x)</option>
-                  <option value={1.5}>Ventana Crítica / Tiempo Restringido (1.5x)</option>
-                  <option value={2.0}>Instalación Energizada (2.0x)</option>
-                </select>
-              </div>
-
-              {/* Modal Logistico Button */}
-              <div style={{ marginBottom: '20px', padding: '15px', background: '#f1f5f9', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <strong style={{ display: 'block', color: 'var(--text-primary)' }}>Auditoría Logística y RRHH</strong>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Ajusta viáticos, hospedaje y movilidad</span>
-                </div>
-                <button 
-                  className="primary-btn" 
-                  onClick={() => setShowLogisticsModal(true)} 
-                  style={{ width: 'auto', padding: '8px 16px', background: activeLogisticsOverrides?.enabled ? '#10b981' : 'var(--accent)' }}
-                >
-                  <Settings size={16} /> Configuración {activeLogisticsOverrides?.enabled ? '(Manual)' : '(Auto)'}
-                </button>
-              </div>
-
-              {/* Imprevistos */}
-              <div className="config-grid" style={{ marginBottom: '20px' }}>
-                <div className="form-group">
-                  <label>Gastos Imprevistos Fijos (Gs.)</label>
-                  <input type="number" min="0" value={gastosImprevistos} onChange={(e) => { setGastosImprevistos(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
-                </div>
-                <div className="form-group">
-                  <label>Margen Adicional Imprevistos (%)</label>
-                  <input type="number" min="0" value={margenImprevistosPorcentaje} onChange={(e) => { setMargenImprevistosPorcentaje(parseFloat(e.target.value) || 0); setIsDirty(true); }} />
-                </div>
-                <div className="form-group">
-                  <label style={{ fontWeight: 'bold', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ background: '#e0f2fe', color: '#0369a1', borderRadius: '4px', padding: '1px 7px', fontSize: '0.75rem', fontWeight: 700 }}>ADM</span>
-                    Gastos Adm. y Financieros (%)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="50"
-                    step="0.5"
-                    value={gastosAdminFinancieroPct}
-                    onChange={(e) => { setGastosAdminFinancieroPct(parseFloat(e.target.value) || 0); setIsDirty(true); }}
-                    style={{ borderColor: '#0369a1' }}
-                  />
-                  <small style={{ color: '#64748b', display: 'block', marginTop: '3px', lineHeight: 1.4 }}>
-                    Aplicado sobre P. Venta S/IVA. Default: 6%.<br/>
-                    Se distribuye en el precio de cada ítem.
-                  </small>
-                </div>
-              </div>
-            </div>
-
-            {/* Alquileres Especiales (Siempre accesibles como partida independiente) */}
-            <div style={{ marginTop: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', color: 'var(--text-primary)' }}>Servicios de Apoyo y Alquileres (Grúas, Fletes)</label>
-              {alquileres.map((alq) => {
-                const margenDecimal = Math.min(0.99, Math.max(0, (alq.margen ?? 30) / 100));
-                const precioEstimado = margenDecimal < 1 ? (alq.costo / (1 - margenDecimal)) : alq.costo;
-                const margenSVenta = precioEstimado > 0 ? ((1 - alq.costo / precioEstimado) * 100) : 0;
-                return (
-                  <div key={alq.id} style={{ marginBottom: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px' }}>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <input type="text" placeholder="Descripción (ej: Grúa, Flete, Andamio)" value={alq.descripcion} onChange={e => updateAlquiler(alq.id, 'descripcion', e.target.value)} style={{ flex: '2 1 180px', minWidth: '140px' }} />
-                      <input type="number" placeholder="Costo (Gs)" value={alq.costo} onChange={e => updateAlquiler(alq.id, 'costo', parseFloat(e.target.value) || 0)} style={{ flex: '1 1 120px', minWidth: '100px' }} />
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '80px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <input
-                            type="number"
-                            min="0"
-                            max="99"
-                            placeholder="30"
-                            value={alq.margen ?? 30}
-                            onChange={e => updateAlquiler(alq.id, 'margen', parseFloat(e.target.value) || 0)}
-                            style={{ width: '64px', textAlign: 'center', borderColor: '#0284c7', fontWeight: 'bold' }}
-                            title="Margen sobre precio de venta (%)"
-                          />
-                          <span style={{ fontSize: '0.8rem', color: '#0284c7', fontWeight: 700 }}>%</span>
-                        </div>
-                        <span style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '2px', whiteSpace: 'nowrap' }}>Margen s/Venta</span>
-                      </div>
-                      <button className="remove-btn" onClick={() => removeAlquiler(alq.id)} style={{ flexShrink: 0 }}><Trash2 size={18}/></button>
-                    </div>
-                    {alq.costo > 0 && (
-                      <div style={{ display: 'flex', gap: '16px', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #e2e8f0', fontSize: '0.78rem', color: '#64748b' }}>
-                        <span>Costo: <strong style={{ color: '#1e293b' }}>{formatGs(alq.costo)}</strong></span>
-                        <span style={{ color: '#0284c7' }}>P. Venta estimado: <strong style={{ color: '#0369a1', fontSize: '0.85rem' }}>{formatGs(Math.round(precioEstimado))}</strong></span>
-                        <span style={{ color: '#10b981' }}>Ganancia: <strong>+{formatGs(Math.round(precioEstimado - alq.costo))}</strong></span>
-                        <span style={{ background: '#e0f2fe', color: '#0284c7', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>{margenSVenta.toFixed(1)}% margen</span>
-                      </div>
-                    )}
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[11px] text-slate-500 font-medium">Cant:</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={searchCantidad}
+                      onChange={(e) => setSearchCantidad(e.target.value)}
+                      className="w-12 px-2 py-1.5 rounded-lg border border-slate-300 bg-white text-xs text-slate-800 text-center font-bold"
+                    />
                   </div>
-                );
-              })}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                <button className="primary-btn" onClick={addAlquiler} style={{ width: 'auto', padding: '6px 12px', background: '#64748b' }}><Plus size={16} /> Agregar</button>
-                <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Costo total: <strong style={{ color: 'var(--text-primary)' }}>{formatGs(alquileres.reduce((sum, a) => sum + (a.costo || 0), 0))}</strong></span>
-                  <span style={{ color: '#0284c7' }}>P. Venta total: <strong style={{ color: '#0369a1' }}>{formatGs(alquileres.reduce((sum, a) => { const md = Math.min(0.99, Math.max(0, (a.margen ?? 30) / 100)); return sum + (md < 1 ? (a.costo / (1 - md)) : a.costo); }, 0))}</strong></span>
+                  <button
+                    type="button"
+                    onClick={handleAddFromDatalist}
+                    disabled={!searchQuery.trim()}
+                    className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus size={14} /> Agregar
+                  </button>
                 </div>
               </div>
-            </div>
 
-          </div>
+              {/* ========================================================================= */}
+              {/* LISTA DEL CARRITO TÉCNICO (CON EDICIÓN INLINE CAPA 1) */}
+              {/* ========================================================================= */}
+              <div style={{ maxHeight: '48vh', overflowY: 'auto' }} className="divide-y divide-slate-100 border border-slate-100 rounded-lg">
+                {resultadosCalculados.equiposProcesados.length === 0 ? (
+                  <div className="py-10 px-4 text-center bg-slate-50/70 rounded-lg">
+                    <PackagePlus size={36} className="text-slate-400 mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-slate-700 mb-1">El carrito está vacío.</p>
+                    <p className="text-xs text-slate-500 m-0">
+                      Usa <strong>Paquete Mantenimiento Trafo</strong>, el buscador <strong>A la Carta</strong> o <strong>+ Ítem Manual</strong> para comenzar.
+                    </p>
+                  </div>
+                ) : (
+                  resultadosCalculados.equiposProcesados.map((item, index) => {
+                    const isTerc = item.overrides?.is_tercerizado;
+                    const costoDirecto = isTerc ? (item.overrides?.costo_total_base ?? item.baseData?.costo_total_base ?? 0) : item.costo_directo_unitario;
+
+                    return (
+                      <div 
+                        key={item.id || index} 
+                        className="bg-white p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/70 transition-colors"
+                      >
+                        {/* Cantidad & Descripción */}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2.5 mb-1.5">
+                            <input 
+                              type="number" 
+                              value={item.cantidad} 
+                              min="1"
+                              onChange={(e) => updateQuantity(item.id, e.target.value)}
+                              className="w-12 p-1 rounded border border-slate-300 text-center font-bold text-xs bg-white text-slate-800"
+                              title="Cantidad de unidades"
+                            />
+                            
+                            {/* Input de descripción editable inline */}
+                            <input
+                              type="text"
+                              value={item.equipo}
+                              onChange={(e) => updateItemName(item.id, e.target.value)}
+                              className={`flex-1 font-bold text-sm px-2 py-0.5 rounded border transition-colors ${
+                                item.needsPriceReview 
+                                  ? 'border-orange-400 bg-orange-50 text-orange-800' 
+                                  : 'border-transparent hover:border-slate-300 focus:border-blue-500 bg-transparent text-slate-800'
+                              }`}
+                              title="Haz clic para editar la descripción"
+                            />
+
+                            {/* Badges */}
+                            <div className="flex gap-1.5 flex-wrap">
+                              {isTerc && (
+                                <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-semibold">
+                                  {item.overrides?.modo_subcontrato === 'jornal'
+                                    ? `Jornal (${(item.overrides.sub_esp_cant || 0) + (item.overrides.sub_aux_cant || 0)}p)`
+                                    : 'SSTT Flat'}
+                                </span>
+                              )}
+                              {item.overrides?.top_down_enabled && (
+                                <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-semibold">Top-Down</span>
+                              )}
+                              {item.overrides?.modoUso === 'Reserva' && (
+                                <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-semibold">Reserva</span>
+                              )}
+                              {isItemModified(item) && (
+                                <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-semibold">Modificado</span>
+                              )}
+                              {item.needsPriceReview && (
+                                <span className="text-[10px] bg-orange-500 text-white px-2 py-0.5 rounded font-bold animate-pulse flex items-center gap-1"
+                                  title="Este ítem no está en el catálogo. El costo es Gs. 0 — abrí el modal de edición para ajustar el precio antes de enviar la cotización.">
+                                  <ShieldAlert size={10} /> COSTO PENDIENTE
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Fila de Tensión y Costo Unitario Pactado */}
+                          <div className="flex items-center gap-3 text-xs text-slate-500 pl-14">
+                            <span>{item.tension || 'N/A'}</span>
+                            <span>•</span>
+                            <div className="flex items-center gap-1.5">
+                              <span>Costo Unit. Pactado:</span>
+                              <input
+                                type="number"
+                                value={costoDirecto}
+                                onChange={(e) => updateItemCosto(item.id, e.target.value)}
+                                className="w-24 px-1.5 py-0.5 text-xs rounded border border-slate-300 bg-slate-50 font-semibold text-slate-800"
+                                title="Costo unitario directo o de subcontratista pactado (Gs.)"
+                              />
+                              <span>Gs.</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Total y Acciones */}
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="text-right">
+                            <span className="block text-sm font-extrabold text-slate-900">
+                              {formatGs(item.precio_total_final)}
+                            </span>
+                            <span className="text-[11px] text-slate-500">P. Venta Total</span>
+                          </div>
+                          <button 
+                            type="button"
+                            onClick={() => openEditModal(item)} 
+                            className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-lg transition-colors cursor-pointer" 
+                            title="Configuración avanzada / Override"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => removeItem(item.id)} 
+                            className="p-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg transition-colors cursor-pointer"
+                            title="Eliminar del carrito"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* FOOTER DEL CARRITO: TOGGLE PROVISIÓN SSMA Y CONSUMIBLES (5% PARETO) */}
+              <div className="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-3.5 flex justify-between items-center flex-wrap gap-3 transition-all">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${activeAplicarSSMA ? 'bg-emerald-100/70 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>
+                    <ShieldCheck size={18} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        Aplicar Provisión Estándar de SSMA y Consumibles
+                      </span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                        5% Pareto
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-slate-500 block mt-0.5">
+                      {activeAplicarSSMA
+                        ? `EPP, guantes, trapos y seguridad industrial calculados automáticamente (${formatGs(resultadosCalculados?.Costo_SSMA_Consumibles || 0)})`
+                        : 'Provisión desactivada (0 Gs.)'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {activeAplicarSSMA && (
+                    <span className="text-xs font-bold text-emerald-700">
+                      +{formatGs(resultadosCalculados?.Costo_SSMA_Consumibles || 0)}
+                    </span>
+                  )}
+                  <label className="relative inline-flex items-center cursor-pointer m-0">
+                    <input
+                      type="checkbox"
+                      checked={activeAplicarSSMA}
+                      onChange={(e) => {
+                        updateAplicarSSMA(e.target.checked);
+                        setIsDirty(true);
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 2: LOGÍSTICA E INDIRECTOS */}
+          {activeTab === 'logistica' && (
+            <div className="bg-white border border-slate-200 shadow-sm rounded-xl rounded-tl-none overflow-hidden p-6 relative">
+              
+              {/* Cabecera con Switch On/Off */}
+              <div className="flex justify-between items-center flex-wrap gap-3 mb-5">
+                <div className="flex items-center gap-3">
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${activeAplicarIndirectos ? 'bg-blue-50 border border-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                    <Truck size={20} />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900 m-0">
+                      Centro de Control de Gastos Indirectos
+                    </h2>
+                    <span className="text-xs text-slate-500">
+                      {activeAplicarIndirectos ? 'Logística, viáticos, hospedaje, imprevistos y alquileres especiales' : 'Desactivado (0 Gs / 0 USD para cotizaciones de terceros)'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* SWITCH / TOGGLE */}
+                <div className="flex items-center gap-3 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+                  <span className="text-xs font-semibold text-slate-700">
+                    {activeAplicarIndirectos ? 'Gastos Indirectos Activos' : 'Centro en Cero'}
+                  </span>
+                  <label className="relative inline-flex items-center cursor-pointer m-0">
+                    <input
+                      type="checkbox"
+                      checked={activeAplicarIndirectos}
+                      onChange={(e) => {
+                        updateAplicarIndirectos(e.target.checked);
+                        setIsDirty(true);
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Banner explicativo cuando está en cero */}
+              {!activeAplicarIndirectos && (
+                <div className="bg-slate-50 border border-dashed border-slate-300 p-3.5 rounded-lg mb-5 flex items-start gap-3">
+                  <ShieldAlert size={18} className="text-slate-400 shrink-0 mt-0.5" />
+                  <div className="text-xs text-slate-600 leading-relaxed">
+                    <strong>Modo Servicios Tercerizados / Sin Despliegue Propio:</strong> La logística, viáticos, hospedajes, peajes e imprevistos están anulados en <strong>0 Gs.</strong> para que el precio de venta refleje exactamente la cotización directa de terceros sin recargos operativos internos.
+                  </div>
+                </div>
+              )}
+              
+              {/* Contenido condicionado con opacidad visual */}
+              <div className={`transition-opacity duration-200 ${activeAplicarIndirectos ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                {/* Parámetros Básicos */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200">
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Distancia ida/vuelta (km)</label>
+                    <input 
+                      type="number" 
+                      min="0" 
+                      value={distanciaKm} 
+                      onChange={(e) => { setDistanciaKm(parseFloat(e.target.value) || 0); setIsDirty(true); }} 
+                      className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white font-semibold text-slate-800"
+                    />
+                  </div>
+                  <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200">
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Días Permitidos (Corte)</label>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      value={diasPermitidosCorte} 
+                      onChange={(e) => { setDiasPermitidosCorte(parseInt(e.target.value) || 1); setIsDirty(true); }} 
+                      className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white font-semibold text-slate-800"
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 mb-4">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">Condición de Trabajo / Ventana de Corte (Multiplicador de Riesgo)</label>
+                  <select 
+                    value={condicionTrabajo} 
+                    onChange={(e) => { setCondicionTrabajo(parseFloat(e.target.value)); setIsDirty(true); }}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white font-semibold text-slate-800"
+                  >
+                    <option value={1.0}>Normal / Obra Nueva (1.0x)</option>
+                    <option value={1.2}>Ventana Nocturna Estándar (1.2x)</option>
+                    <option value={1.5}>Ventana Crítica / Tiempo Restringido (1.5x)</option>
+                    <option value={2.0}>Instalación Energizada (2.0x)</option>
+                  </select>
+                </div>
+
+                {/* Modal Logistico Button */}
+                <div className="mb-4 p-3.5 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center flex-wrap gap-3">
+                  <div>
+                    <strong className="block text-xs font-bold text-slate-800">Auditoría Logística y RRHH</strong>
+                    <span className="text-[11px] text-slate-500">Ajusta viáticos, hospedaje y movilidad</span>
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={() => setShowLogisticsModal(true)} 
+                    className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 px-3 py-2 rounded-lg text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Settings size={14} className="text-slate-500" /> Configuración {activeLogisticsOverrides?.enabled ? '(Manual)' : '(Auto)'}
+                  </button>
+                </div>
+
+                {/* Imprevistos & Gastos Admin */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200">
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Gastos Imprevistos Fijos (Gs.)</label>
+                    <input 
+                      type="number" 
+                      min="0" 
+                      value={gastosImprevistos} 
+                      onChange={(e) => { setGastosImprevistos(parseFloat(e.target.value) || 0); setIsDirty(true); }} 
+                      className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white font-semibold text-slate-800"
+                    />
+                  </div>
+                  <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200">
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Margen Adicional Imprevistos (%)</label>
+                    <input 
+                      type="number" 
+                      min="0" 
+                      value={margenImprevistosPorcentaje} 
+                      onChange={(e) => { setMargenImprevistosPorcentaje(parseFloat(e.target.value) || 0); setIsDirty(true); }} 
+                      className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white font-semibold text-slate-800"
+                    />
+                  </div>
+                  <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200">
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Gastos Adm. y Financieros (%)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="50"
+                      step="0.5"
+                      value={gastosAdminFinancieroPct}
+                      onChange={(e) => { setGastosAdminFinancieroPct(parseFloat(e.target.value) || 0); setIsDirty(true); }}
+                      className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white font-semibold text-slate-800"
+                    />
+                    <small className="text-[10px] text-slate-500 block mt-1 leading-tight">
+                      S/ P. Venta. Default: 6%.
+                    </small>
+                  </div>
+                </div>
+              </div>
+
+              {/* Alquileres Especiales (Siempre accesibles como partida independiente) */}
+              <div className="mt-4 pt-4 border-t border-slate-200">
+                <label className="block mb-3 text-xs font-bold text-slate-800 uppercase tracking-wider">Servicios de Apoyo y Alquileres (Grúas, Fletes)</label>
+                {alquileres.map((alq) => {
+                  const margenDecimal = Math.min(0.99, Math.max(0, (alq.margen ?? 30) / 100));
+                  const precioEstimado = margenDecimal < 1 ? (alq.costo / (1 - margenDecimal)) : alq.costo;
+                  const margenSVenta = precioEstimado > 0 ? ((1 - alq.costo / precioEstimado) * 100) : 0;
+                  return (
+                    <div key={alq.id} className="mb-3 bg-slate-50 border border-slate-200 rounded-lg p-3">
+                      <div className="flex gap-2 items-center flex-wrap">
+                        <input 
+                          type="text" 
+                          placeholder="Descripción (ej: Grúa, Flete, Andamio)" 
+                          value={alq.descripcion} 
+                          onChange={e => updateAlquiler(alq.id, 'descripcion', e.target.value)} 
+                          className="flex-[2_1_180px] min-w-[140px] px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-800"
+                        />
+                        <input 
+                          type="number" 
+                          placeholder="Costo (Gs)" 
+                          value={alq.costo} 
+                          onChange={e => updateAlquiler(alq.id, 'costo', parseFloat(e.target.value) || 0)} 
+                          className="flex-[1_1_120px] min-w-[100px] px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-800 font-semibold"
+                        />
+                        <div className="flex flex-col items-center min-w-[80px]">
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min="0"
+                              max="99"
+                              placeholder="30"
+                              value={alq.margen ?? 30}
+                              onChange={e => updateAlquiler(alq.id, 'margen', parseFloat(e.target.value) || 0)}
+                              className="w-16 px-2 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-center font-bold text-slate-800"
+                              title="Margen sobre precio de venta (%)"
+                            />
+                            <span className="text-xs text-slate-500 font-bold">%</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 mt-0.5 whitespace-nowrap">Margen s/Venta</span>
+                        </div>
+                        <button 
+                          type="button"
+                          onClick={() => removeAlquiler(alq.id)} 
+                          className="p-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg transition-colors cursor-pointer shrink-0"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                      {alq.costo > 0 && (
+                        <div className="flex gap-4 mt-2 pt-2 border-t border-dashed border-slate-200 text-xs text-slate-600 flex-wrap">
+                          <span>Costo: <strong className="text-slate-800">{formatGs(alq.costo)}</strong></span>
+                          <span>P. Venta estimado: <strong className="text-blue-700">{formatGs(Math.round(precioEstimado))}</strong></span>
+                          <span>Ganancia: <strong className="text-emerald-600">+{formatGs(Math.round(precioEstimado - alq.costo))}</strong></span>
+                          <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">{margenSVenta.toFixed(1)}% margen</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <div className="flex justify-between items-center mt-3 flex-wrap gap-2">
+                  <button 
+                    type="button"
+                    onClick={addAlquiler} 
+                    className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Plus size={14} /> Agregar Alquiler
+                  </button>
+                  <div className="flex gap-4 text-xs">
+                    <span className="text-slate-500">Costo total: <strong className="text-slate-800">{formatGs(alquileres.reduce((sum, a) => sum + (a.costo || 0), 0))}</strong></span>
+                    <span className="text-blue-600">P. Venta total: <strong className="text-blue-700">{formatGs(alquileres.reduce((sum, a) => { const md = Math.min(0.99, Math.max(0, (a.margen ?? 30) / 100)); return sum + (md < 1 ? (a.costo / (1 - md)) : a.costo); }, 0))}</strong></span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          )}
         </div>
 
         {/* COLUMNA DERECHA: WORKFLOW / CÁLCULO FINAL (40%) */}
-        <div className="right-panel" style={{ position: 'sticky', top: '16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div className="right-panel sticky top-4 flex flex-col gap-5">
           
           {/* CRM Financial Panel */}
           <div>

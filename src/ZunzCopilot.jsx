@@ -119,7 +119,7 @@ const ZunzCopilot = forwardRef(({ activeBlock }, ref) => {
           pointerEvents: 'auto' // Avatar is clickable
         }}
         onClick={() => {
-          setToastMessage('Sistema ZUNZ Copilot Activo ⚡');
+          setToastMessage('Sistema ZUNZ Copilot Activo');
           setShowToast(true);
           setTimeout(() => setShowToast(false), 3000);
         }}

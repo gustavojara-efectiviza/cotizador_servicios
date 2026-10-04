@@ -75,19 +75,30 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
   // --- 2. PROCESAMIENTO DE SERVICIOS SSTT (Regla de Imprevistos, Tercerizados y MO Propia) ---
   const serviciosProcesados = servicios.map(item => {
     const qty = safeNum(item.cantidad) || 1;
-    const esTercerizado = item.estrategia === 'Subcontrato' || item.is_tercerizado === true || (safeNum(item.Costo_Subcontrato_Item) > 0 && safeNum(item.Costo_MO_Item) === 0);
+    const esTercerizado = item.estrategia === 'Subcontrato' || item.is_tercerizado === true || item.isTercerizado === true || (safeNum(item.Costo_Subcontrato_Item) > 0 && safeNum(item.Costo_MO_Item) === 0);
     
-    const cTec = esTercerizado ? 0 : safeNum(convertir(item.Costo_Tecnologia_Item, item.moneda || 'PYG'));
+    // Campos del motor: Costo_Tecnologia (sin _Item) o Costo_Tecnologia_Item (adaptado)
+    const cTec = esTercerizado ? 0 : safeNum(convertir(item.Costo_Tecnologia_Item || item.Costo_Tecnologia, item.moneda || 'PYG'));
     const cMO = esTercerizado ? 0 : safeNum(convertir(item.Costo_MO_Item, item.moneda || 'PYG'));
     const cSubc = esTercerizado ? safeNum(convertir(item.Costo_Subcontrato_Item || item.costoBase, item.moneda || 'PYG')) : 0;
-    const cFee = safeNum(convertir(item.costoServiceFee, item.moneda || 'PYG'));
-    const cAmort = safeNum(convertir(item.costoAmortizacion, item.moneda || 'PYG'));
+    // costoFee y costoAmort vienen del motor directamente
+    const cFee = safeNum(convertir(item.costoFee || item.overrides?.costoServiceFee, item.moneda || 'PYG'));
+    const cAmort = safeNum(convertir(item.costoAmort || item.overrides?.costoAmortizacion, item.moneda || 'PYG'));
     
     const subtotalDirectoUnit = cTec + cMO + cSubc + cFee + cAmort;
     const subtotalDirectoTotal = subtotalDirectoUnit * qty;
 
     const horas_equipo = esTercerizado ? 0 : (safeNum(item.horas_equipo));
     const horas_servicio = esTercerizado ? 0 : (safeNum(item.horas_servicio));
+
+    // Campos pre-calculados por el motor (precioVentaNeto, logAsignada, etc.)
+    const precioVentaNeto = item.precioVentaNeto || (item.precio_total_final ? item.precio_total_final / 1.10 : 0);
+    const precioVentaConIVA = item.precioVentaConIVA || item.precio_total_final || 0;
+    const logAsignada = item.logAsignada || 0;
+    const impAsignado = item.impAsignado || 0;
+    const ssmaAsignado = item.ssmaAsignado || 0;
+    const adminAsignado = item.adminAsignado || 0;
+    const margen = item.margen || item.margenDecimal || 0;
 
     return {
       ...item,
@@ -102,7 +113,14 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
       cFee,
       cAmort,
       subtotalDirectoUnit,
-      subtotalDirectoTotal
+      subtotalDirectoTotal,
+      precioVentaNeto,
+      precioVentaConIVA,
+      logAsignada,
+      impAsignado,
+      ssmaAsignado,
+      adminAsignado,
+      margen
     };
   });
 
@@ -696,7 +714,8 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
     `PRECIO VENTA NETO (${moneda})`,
     `UTILIDAD NETA (${moneda})`,
     'Margen Real Blended (%)',
-    `PRECIO TOTAL c/ IVA (${moneda})`
+    `PRECIO TOTAL c/ IVA (${moneda})`,
+    'Margen s/Venta Aplic. (%)'
   ];
   
   const headerRow3 = sheet3.addRow(headersSheet3);
@@ -772,7 +791,8 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
       0, // Col 23: Precio Venta Neto (W)
       0, // Col 24: Utilidad Neta (X)
       0, // Col 25: Margen Real Blended (Y)
-      item.precioVentaConIVA // Col 26: Precio Total c/ IVA (Z)
+      item.precioVentaConIVA, // Col 26: Precio Total c/ IVA (Z)
+      item.margen || 0  // Col 27: Margen s/Venta
     ]);
 
     const r = row.number;
@@ -781,20 +801,75 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
 
     row.getCell(12).value = { formula: `G${r}+H${r}+I${r}+J${r}+K${r}`, result: item.subtotalDirectoUnit };
     row.getCell(13).value = { formula: `D${r}*L${r}`, result: item.subtotalDirectoTotal };
-    row.getCell(17).value = { formula: `M${r}+N${r}+O${r}+P${r}+V${r}`, result: item.subtotalDirectoTotal + item.logAsignada + item.impAsignado + (item.ssmaAsignado || 0) + item.adminAsignado };
-    
+
     const divServ = Math.max(0.01, 1 - Math.min(0.99, item.margen));
-    row.getCell(18).value = { formula: `M${r}/${divServ}`, result: item.subtotalDirectoTotal / divServ };
-    row.getCell(19).value = { formula: `N${r}/0.70`, result: item.logAsignada / 0.70 };
-    row.getCell(20).value = { formula: `O${r}/0.70`, result: item.impAsignado / 0.70 };
-    row.getCell(21).value = { formula: `P${r}`, result: (item.ssmaAsignado || 0) };
-    row.getCell(23).value = { formula: `R${r}+S${r}+T${r}+U${r}+V${r}`, result: (item.subtotalDirectoTotal/divServ) + (item.logAsignada/0.7) + (item.impAsignado/0.7) + (item.ssmaAsignado||0) + item.adminAsignado };
-    row.getCell(24).value = { formula: `W${r}-Q${r}`, result: 0 };
-    row.getCell(25).value = { formula: `X${r}/W${r}`, result: 0 };
-    row.getCell(26).value = item.precioVentaConIVA;
+    const isTopDown = item.estrategia === 'Top-Down' || item.isTopDown === true;
+    const adminRate = 0.06;
+
+    if (isTopDown && item.precio_total_final > 0) {
+      // TOP-DOWN: El precio viene dado por el mercado (Z = con IVA). Todo se calcula hacia atrs.
+      const pvTotalMercadoNeto = item.precio_total_final;
+      // Z (Col 26) se mantiene fijo como valor (al final de este bloque).
+      // W (Col 23): PV Neto. Le damos el valor fijo del mercado.
+      row.getCell(23).value = pvTotalMercadoNeto;
+      
+      // V (Col 22): Admin = W - (W / 1.06)
+      const adminTopDown = pvTotalMercadoNeto - (pvTotalMercadoNeto / (1 + adminRate));
+      row.getCell(22).value = { formula: `W${r}-(W${r}/${1 + adminRate})`, result: adminTopDown };
+
+      // S, T, U se calculan desde sus costos
+      row.getCell(19).value = { formula: `N${r}/0.70`, result: item.logAsignada / 0.70 };
+      row.getCell(20).value = { formula: `O${r}/0.70`, result: item.impAsignado / 0.70 };
+      row.getCell(21).value = { formula: `P${r}/0.70`, result: (item.ssmaAsignado || 0) / 0.70 };
+
+      // R (Col 18): Servicio = W - (S + T + U + V) -> INGENIER?A INVERSA
+      const pvLog = item.logAsignada / 0.70;
+      const pvImp = item.impAsignado / 0.70;
+      const pvSSMA = (item.ssmaAsignado || 0) / 0.70;
+      const pvServicio = pvTotalMercadoNeto - pvLog - pvImp - pvSSMA - adminTopDown;
+      row.getCell(18).value = { formula: `W${r}-S${r}-T${r}-U${r}-V${r}`, result: pvServicio };
+    } else {
+      // NORMAL: El precio se construye desde el costo hacia adelante.
+      row.getCell(18).value = { formula: `M${r}/${divServ}`, result: item.subtotalDirectoTotal / divServ };
+      row.getCell(19).value = { formula: `N${r}/0.70`, result: item.logAsignada / 0.70 };
+      row.getCell(20).value = { formula: `O${r}/0.70`, result: item.impAsignado / 0.70 };
+      row.getCell(21).value = { formula: `P${r}/0.70`, result: (item.ssmaAsignado || 0) / 0.70 };
+
+      // V (Col 22): Admin = 6% de la suma de los PV anteriores
+      const pvServicio = item.subtotalDirectoTotal / divServ;
+      const pvLog = item.logAsignada / 0.70;
+      const pvImp = item.impAsignado / 0.70;
+      const pvSSMA = (item.ssmaAsignado || 0) / 0.70;
+      const adminNormal = (pvServicio + pvLog + pvImp + pvSSMA) * adminRate;
+      row.getCell(22).value = { formula: `(R${r}+S${r}+T${r}+U${r})*${adminRate}`, result: adminNormal };
+
+      // W (Col 23): PV Neto = R + S + T + U + V
+      const pvNetoNormal = pvServicio + pvLog + pvImp + pvSSMA + adminNormal;
+      row.getCell(23).value = { formula: `R${r}+S${r}+T${r}+U${r}+V${r}`, result: pvNetoNormal };
+    }
+
+    // Q (Col 17): Costo Total Real = M + N + O + P + V
+    // NOTA: El costo admin real (V) est absorbido en el PV, por lo que su costo es igual a V.
+    const adminParaCosto = row.getCell(22).value.result || row.getCell(22).value;
+    const costoRealItem = item.subtotalDirectoTotal + item.logAsignada + item.impAsignado + (item.ssmaAsignado || 0) + adminParaCosto;
+    row.getCell(17).value = { formula: `M${r}+N${r}+O${r}+P${r}+V${r}`, result: costoRealItem };
+
+    // X (Col 24): Utilidad = W - Q
+    const pvNetoFinal = row.getCell(23).value.result || row.getCell(23).value;
+    const utilidadFinal = pvNetoFinal - costoRealItem;
+    row.getCell(24).value = { formula: `W${r}-Q${r}`, result: utilidadFinal };
+
+    // Y (Col 25): Margen Blended = X / W
+    const blendedFinal = pvNetoFinal > 0 ? (utilidadFinal / pvNetoFinal) : 0;
+    row.getCell(25).value = { formula: `X${r}/W${r}`, result: blendedFinal };
+
+    // Z (Col 26): Precio con IVA = W * 1.10
+    row.getCell(26).value = { formula: `W${r}*1.10`, result: pvNetoFinal * 1.10 };
 
     [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 26].forEach(col => row.getCell(col).numFmt = moneyFormat);
     row.getCell(25).numFmt = percentFormat;
+    row.getCell(27).value = item.margen || 0;
+    row.getCell(27).numFmt = percentFormat;
     row.getCell(1).alignment = { horizontal: 'center' };
     row.getCell(3).alignment = { horizontal: 'center' };
     row.getCell(4).alignment = { horizontal: 'center' };
@@ -822,12 +897,25 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
     totalRow3.getCell(14).value = { formula: `SUM(N${startRowSSTTAudit}:N${endRowSSTTAudit})`, result: sumSSTTLog };
     totalRow3.getCell(15).value = { formula: `SUM(O${startRowSSTTAudit}:O${endRowSSTTAudit})`, result: sumSSTTImp };
     totalRow3.getCell(16).value = { formula: `SUM(P${startRowSSTTAudit}:P${endRowSSTTAudit})`, result: sumSSTTSSMA };
-    totalRow3.getCell(17).value = { formula: `SUM(Q${startRowSSTTAudit}:Q${endRowSSTTAudit})`, result: sumSSTTAdmin };
+    totalRow3.getCell(17).value = { formula: `SUM(Q${startRowSSTTAudit}:Q${endRowSSTTAudit})`, result: sumSSTTSubDirectoTotal + sumSSTTLog + sumSSTTImp + sumSSTTSSMA + sumSSTTAdmin };
     totalRow3.getCell(18).value = { formula: `SUM(R${startRowSSTTAudit}:R${endRowSSTTAudit})`, result: sumSSTTCostoReal };
-    totalRow3.getCell(21).value = { formula: `SUM(U${startRowSSTTAudit}:U${endRowSSTTAudit})`, result: sumSSTTVentaIVA };
+    totalRow3.getCell(19).value = { formula: `SUM(S${startRowSSTTAudit}:S${endRowSSTTAudit})`, result: sumSSTTLog / 0.70 };
+    totalRow3.getCell(20).value = { formula: `SUM(T${startRowSSTTAudit}:T${endRowSSTTAudit})`, result: sumSSTTImp / 0.70 };
+    totalRow3.getCell(21).value = { formula: `SUM(U${startRowSSTTAudit}:U${endRowSSTTAudit})`, result: sumSSTTSSMA / 0.70 };
+    totalRow3.getCell(22).value = { formula: `SUM(V${startRowSSTTAudit}:V${endRowSSTTAudit})`, result: sumSSTTAdmin };
+    totalRow3.getCell(23).value = { formula: `SUM(W${startRowSSTTAudit}:W${endRowSSTTAudit})`, result: sumSSTTVentaNeto };
+    // PV Neto total = suma de columna W en el Excel
+    // Costo total = CostoDirecto + Logística costo + Imprevistos costo + SSMA + Admin (costos puros)
+    const _sumCostoReal = sumSSTTSubDirectoTotal + sumSSTTLog + sumSSTTImp + sumSSTTSSMA + sumSSTTAdmin;
+    const _sumUtilidad = sumSSTTVentaNeto - _sumCostoReal;
+    const _margenBlenTotal = sumSSTTVentaNeto > 0 ? _sumUtilidad / sumSSTTVentaNeto : 0;
+    totalRow3.getCell(24).value = { formula: `SUM(X${startRowSSTTAudit}:X${endRowSSTTAudit})`, result: _sumUtilidad };
+    totalRow3.getCell(25).value = { formula: `X${totalRow3.number}/W${totalRow3.number}`, result: _margenBlenTotal };
+    totalRow3.getCell(25).numFmt = percentFormat;
+    totalRow3.getCell(26).value = { formula: `SUM(Z${startRowSSTTAudit}:Z${endRowSSTTAudit})`, result: sumSSTTVentaIVA };
 
     totalRow3.eachCell(c => { c.font = blackFontBold; c.border = thinBorder; });
-    [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21].forEach(col => totalRow3.getCell(col).numFmt = moneyFormat);
+    [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 26].forEach(col => totalRow3.getCell(col).numFmt = moneyFormat);
     totalRow3.fill = sectionFill;
   }
 
@@ -1049,5 +1137,12 @@ export const exportarAExcelAuditable = async (estadoGlobal) => {
   }
   
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  saveAs(blob, nombreArchivo);
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = nombreArchivo || 'Cotizacion_Beigel.xlsx';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
 };
