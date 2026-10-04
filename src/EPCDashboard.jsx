@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Bloque0_Setup from './Bloque0_Setup';
 import Bloque1_Procura from './Bloque1_Procura';
 import Bloque2_SSTT from './Bloque2_SSTT';
@@ -7,26 +7,17 @@ import SavedQuotesPanel from './SavedQuotesPanel';
 import ZunzCopilot from './ZunzCopilot';
 import { upsertCotizacionV2 } from './services/dbService';
 import { auth } from './firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
 import Login from './Login';
 import { 
   Zap, 
-  Building2, 
-  Briefcase, 
-  Layers, 
   ShoppingCart, 
   Wrench, 
   ShieldCheck, 
   ChevronRight, 
-  Package, 
   Sliders, 
-  Lock, 
-  TrendingUp, 
   Sun, 
   Truck, 
-  Boxes,
-  ChevronDown,
-  ChevronUp,
   Copy,
   RotateCcw,
   Save,
@@ -36,7 +27,7 @@ import {
   XCircle
 } from 'lucide-react';
 
-export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLab }) {
+export default function EPCDashboard({ onSwitchVersion, onOpenLab }) {
   const copilotRef = useRef(null);
 
   // Authentication State
@@ -53,7 +44,6 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
   }, []);
 
   // Estado Global V2
-  const [perfilComercial, setPerfilComercial] = useState('b2b'); // 'b2b' vs 'epc'
   const [rubro, setRubro] = useState('subestaciones'); // 'subestaciones', 'solar', 'movilidad'
   const [activeBlock, setActiveBlock] = useState(1); // Bloque activo para la secuencia (1, 2, 3)
 
@@ -61,7 +51,6 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
   const [totalProcura, setTotalProcura] = useState(0);
   const [totalServicios, setTotalServicios] = useState(0);
 
-  // FUENTE DE VERDAD: Array completo de equipos de Procura (elevado desde Bloque1)
   const [equiposProcura, setEquiposProcura] = useState([]);
 
   // Variables globales de costo de procura (elevado desde Bloque1)
@@ -249,7 +238,7 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
     }
   };
 
-  // Rehidratación completa de cotizaciones
+
   const handleLoadCotizacionV2 = (quote) => {
     const dg = quote.datosGenerales || {};
     setNombreCliente(dg.nombreCliente || quote.Cliente || '');
@@ -542,8 +531,6 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
               tipoCambio={tipoCambioVenta} 
               setTipoCambio={setTipoCambioVenta} 
               monedaTrabajo={monedaTrabajo}
-              onGuardar={guardarCotizacionMaestra}
-              isSaving={isSaving}
             />
 
             <div className="flex justify-end pt-2 w-full">
@@ -610,8 +597,6 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
                 tipoCambio={tipoCambioVenta}
                 nombreCliente={nombreCliente}
                 nombreProyecto={nombreProyecto}
-                onGuardar={guardarCotizacionMaestra}
-                isSaving={isSaving}
               />
 
               <div className="flex justify-between items-center gap-3 mt-8 pt-4 border-t border-slate-200 w-full">
@@ -649,10 +634,7 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
               nombreProyecto={nombreProyecto}
               alquileres={alquileresServicios}
               gastosImprevistos={gastosImprevistos}
-              esLicitacion={perfilComercial === 'epc'}
               resultadosSSTT={resultadosSSTT}
-              onGuardar={guardarCotizacionMaestra}
-              isSaving={isSaving}
               copilotRef={copilotRef}
             />
             

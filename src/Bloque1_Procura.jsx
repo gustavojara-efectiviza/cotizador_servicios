@@ -1,21 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { fetchEquiposMaestros } from './services/dbService';
 import { 
   Globe, 
-  Ship, 
-  DollarSign, 
-  Percent, 
   Plus, 
   Trash2, 
   Edit2, 
   Package, 
   Calculator, 
-  TrendingUp, 
-  CheckCircle2, 
-  FileText, 
   ArrowRightLeft, 
   Upload,
-  Boxes,
   ChevronDown,
   ChevronUp,
   Settings
@@ -41,9 +34,7 @@ export default function Bloque1_Procura({
   setTotalProcura,
   tipoCambio = 7500,
   setTipoCambio,
-  monedaTrabajo = 'USD',
-  onGuardar,
-  isSaving
+  monedaTrabajo = 'USD'
 }) {
   // ESTADO VISUAL DE MONEDA LOCAL (solo UI, no es dato de negocio)
   const [moneda, setMoneda] = useState('USD');
@@ -111,7 +102,7 @@ export default function Bloque1_Procura({
         ...prev,
         nombre: equipoEncontrado.equipo,
         costoBase: equipoEncontrado.costo_total_base || 0,
-        // Si la base de datos tuviera ncm o arancel, lo autocompletamos aquí:
+
         ...(equipoEncontrado.ncm ? { ncm: equipoEncontrado.ncm } : {}),
         ...(equipoEncontrado.porcentajeArancel !== undefined ? { porcentajeArancel: equipoEncontrado.porcentajeArancel } : {})
       }));
