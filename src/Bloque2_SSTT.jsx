@@ -1,15 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Settings, Calculator, FileText, Plus, Trash2, Zap, Layout, Database as DatabaseIcon, Edit2, ShieldAlert, ShieldCheck, PackagePlus, Users, DollarSign, Calendar, Truck, Sparkles, Search, Layers, ListPlus, Check } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Settings, Calculator, Plus, Trash2, Zap, Layout, Edit2, ShieldAlert, ShieldCheck, PackagePlus, Truck, Sparkles, Search } from 'lucide-react';
 import UnifilarConfigurator from './UnifilarConfigurator';
 import CRMFinancialPanelV2 from './CRMFinancialPanelV2';
 import { fetchEquiposMaestros, getTensionsFromData, getEquipmentsByTensionFromData, addEquipoMaestro } from './services/dbService';
-import { calcularCotizacionActiva, Maestro_Precios_Mercado, COSTO_ESPECIALISTA_DIA, COSTO_AUXILIAR_DIA, COSTO_EXTERNO_DIA, TARIFA_EQUIPOS_HORA } from './financialEngine';
-import { CATALOGOS_SERVICIOS_FRECUENTES, buildMacroPaqueteTrafo, buildMacroPCPCompleto, buildItemFromCatalogEntry } from './catalogoMacros';
+import { calcularCotizacionActiva, COSTO_ESPECIALISTA_DIA, COSTO_AUXILIAR_DIA, COSTO_EXTERNO_DIA, TARIFA_EQUIPOS_HORA } from './financialEngine';
+import { CATALOGOS_SERVICIOS_FRECUENTES, buildMacroPaqueteTrafo, buildMacroPCPCompleto } from './catalogoMacros';
 import LogisticsModal from './LogisticsModal';
 import './index.css';
 
-const DEDUCTED_HOSPEDAJE_RATE = 200000;
-const DEDUCTED_VIATICO_RATE = 100000;
 
 function Bloque2_SSTT({
   // DATOS ELEVADOS AL DASHBOARD (Single Source of Truth — FASE 2)
@@ -32,7 +30,6 @@ function Bloque2_SSTT({
   aplicarSSMAProvision = true,
   setAplicarSSMAProvision,
   porcentajeSSMAProvision = 5,
-  setPorcentajeSSMAProvision,
   gastosAdminFinancieroPct = 6,
   setGastosAdminFinancieroPct,
   logisticsOverrides = { enabled: false },
@@ -41,16 +38,9 @@ function Bloque2_SSTT({
   setTotalServicios,
   setDetalleServicios,
   setResultadosSSTT,
-  monedaTrabajo = 'USD',
-  tipoCambio = 7500,
   nombreCliente = '',
-  nombreProyecto = '',
-  onGuardar,
-  isSaving
+  nombreProyecto = ''
 }) {
-  const [tension, setTension] = useState('500 kV');
-  const [equipo, setEquipo] = useState('');
-  const [cantidad, setCantidad] = useState(1);
   const [activeTab, setActiveTab] = useState('carrito'); // 'carrito' | 'logistica'
 
   // Estado para Buscador Capa 2 (Catálogo a la Carta con datalist)
@@ -99,7 +89,7 @@ function Bloque2_SSTT({
   }, []);
 
   const tensions = useMemo(() => getTensionsFromData(maestroData), [maestroData]);
-  const availableEquipments = useMemo(() => getEquipmentsByTensionFromData(maestroData, tension), [maestroData, tension]);
+
 
   // Modal State
   const [editingItem, setEditingItem] = useState(null);
@@ -118,34 +108,8 @@ function Bloque2_SSTT({
   });
 
   // Unsaved changes & Reset
-  const [isDirty, setIsDirty] = useState(false);
-  const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
-
-  const resetQuote = () => {
-    setCart([]);
-    setAlquileres([]);
-    setDistanciaKm(100);
-    setDiasPermitidosCorte(3);
-    setGastosImprevistos(0);
-    setMargenImprevistosPorcentaje(0);
-    setLogisticsOverrides({ enabled: false });
-    setIsDirty(false);
-  };
-
-  const handleNewCosteo = () => {
-    if (isDirty) {
-      setShowUnsavedChangesModal(true);
-    } else {
-      resetQuote();
-    }
-  };
-
-  // Set default equipment when tension changes
-  React.useEffect(() => {
-    if (availableEquipments.length > 0) {
-      setEquipo(availableEquipments[0].equipo);
-    }
-  }, [tension, availableEquipments]);
+  
+  
 
   const isItemModified = (item) => {
     if (!item.overrides) return false;
@@ -192,7 +156,7 @@ function Bloque2_SSTT({
       }
     };
     setCart(prev => [...prev, newItem]);
-    setIsDirty(true);
+    
     showFeedbackToast('Ítem manual agregado al carrito.');
   };
 
@@ -211,7 +175,7 @@ function Bloque2_SSTT({
       }
       return item;
     }));
-    setIsDirty(true);
+    
   };
 
   const updateItemCosto = (id, newCosto) => {
@@ -234,7 +198,7 @@ function Bloque2_SSTT({
       }
       return item;
     }));
-    setIsDirty(true);
+    
   };
 
   // ============================================================================
@@ -342,7 +306,7 @@ function Bloque2_SSTT({
     setCart(prev => [...prev, newItem]);
     setSearchQuery('');
     setSearchCantidad(1);
-    setIsDirty(true);
+    
     showFeedbackToast(`${qty}x ${newItem.equipo} agregado.`);
   };
 
@@ -353,29 +317,17 @@ function Bloque2_SSTT({
   const handleInjectMacroPaqueteTrafo = () => {
     const itemsMacro = buildMacroPaqueteTrafo(30);
     setCart(prev => [...prev, ...itemsMacro]);
-    setIsDirty(true);
+    
     showFeedbackToast(`Paquete Mantenimiento Trafo inyectado (${itemsMacro.length} ítems).`);
   };
 
   const handleInjectMacroPCPCompleto = () => {
     const itemsMacro = buildMacroPCPCompleto(30);
     setCart(prev => [...prev, ...itemsMacro]);
-    setIsDirty(true);
+    
     showFeedbackToast(`Mantenimiento Integral PCP (${itemsMacro.length} ítems) inyectado.`);
   };
 
-  const handleAdd = () => {
-    const equipData = availableEquipments.find(e => e.equipo === equipo);
-    if (!equipData) return;
-
-    setCart(prev => [...prev, {
-      id: crypto.randomUUID(),
-      tension,
-      equipo,
-      cantidad: parseInt(cantidad) || 1,
-      baseData: structuredClone(equipData)
-    }]);
-  };
 
   const handleAddToCartFromUnifilar = (item) => {
     const availables = getEquipmentsByTensionFromData(maestroData, item.tension);
@@ -436,7 +388,7 @@ function Bloque2_SSTT({
     };
 
     setCart(prev => [...prev, newCartItem]);
-    setIsDirty(true);
+    
 
     if (needsPriceReview) {
       // Toast de advertencia con instrucción clara — no bloquea el flujo
@@ -448,14 +400,14 @@ function Bloque2_SSTT({
 
   const removeItem = (id) => {
     setCart(prev => prev.filter(item => item.id !== id));
-    setIsDirty(true);
+    
   };
 
   const updateQuantity = (id, newQty) => {
     const parsedQty = parseInt(newQty);
     if (isNaN(parsedQty) || parsedQty < 1) return;
     setCart(prev => prev.map(item => item.id === id ? { ...item, cantidad: parsedQty } : item));
-    setIsDirty(true);
+    
   };
 
   const openEditModal = (item) => {
@@ -509,7 +461,7 @@ function Bloque2_SSTT({
         ? { ...item, overrides: structuredClone(finalOverrides), needsPriceReview: false } 
         : item
     ));
-    setIsDirty(true);
+    
     closeEditModal();
   };
 
@@ -569,30 +521,30 @@ function Bloque2_SSTT({
       })
     }]);
 
-    setIsDirty(true);
+    
     setShowAdHocModal(false);
   };
 
   const addAlquiler = () => {
     setAlquileres([...alquileres, { id: crypto.randomUUID(), descripcion: '', costo: 0, margen: 30 }]);
-    setIsDirty(true);
+    
   };
 
   const updateAlquiler = (id, field, value) => {
     setAlquileres(alquileres.map(a => a.id === id ? { ...a, [field]: value } : a));
-    setIsDirty(true);
+    
   };
 
   const removeAlquiler = (id) => {
     setAlquileres(alquileres.filter(a => a.id !== id));
-    setIsDirty(true);
+    
   };
 
   // Calculations
   const totalEsfuerzoHoras = cart.reduce((sum, item) => sum + (item.cantidad * (item.overrides?.horas_servicio ?? item.overrides?.horas_equipo ?? item.baseData?.horas_servicio ?? item.baseData?.horas_equipo ?? 0)), 0);
 
   // Generar Cotización Consolidada para el Motor y el Panel Derecho
-  const cotizacionGlobal = {
+  const cotizacionGlobal = useMemo(() => ({
     Cliente: nombreCliente,
     NombreObra: nombreProyecto,
     Distancia_Ida_Vuelta_km: distanciaKm,
@@ -606,7 +558,7 @@ function Bloque2_SSTT({
     aplicarSSMAProvision: activeAplicarSSMA,
     porcentajeSSMAProvision: porcentajeSSMAProvision || 5,
     logisticsOverrides: activeLogisticsOverrides
-  };
+  }), [nombreCliente, nombreProyecto, distanciaKm, diasPermitidosCorte, totalEsfuerzoHoras, gastosImprevistos, margenImprevistosPorcentaje, condicionTrabajo, activeAplicarIndirectos, activeAplicarSSMA, porcentajeSSMAProvision, activeLogisticsOverrides]);
 
   const resultadosCalculados = useMemo(() => {
     return calcularCotizacionActiva({
@@ -614,7 +566,7 @@ function Bloque2_SSTT({
       equiposCotizados: structuredClone(cart),
       alquileres: structuredClone(alquileres)
     });
-  }, [nombreCliente, nombreProyecto, distanciaKm, diasPermitidosCorte, gastosImprevistos, margenImprevistosPorcentaje, condicionTrabajo, activeAplicarIndirectos, activeAplicarSSMA, porcentajeSSMAProvision, activeLogisticsOverrides, cart, alquileres]);
+  }, [cotizacionGlobal, cart, alquileres]);
 
   const totalCostoTecnico = resultadosCalculados?.Precio_Venta_Final || 0;
 
@@ -1671,7 +1623,7 @@ function Bloque2_SSTT({
                       checked={activeAplicarSSMA}
                       onChange={(e) => {
                         updateAplicarSSMA(e.target.checked);
-                        setIsDirty(true);
+                        
                       }}
                       className="sr-only peer"
                     />
@@ -1714,7 +1666,7 @@ function Bloque2_SSTT({
                       checked={activeAplicarIndirectos}
                       onChange={(e) => {
                         updateAplicarIndirectos(e.target.checked);
-                        setIsDirty(true);
+                        
                       }}
                       className="sr-only peer"
                     />
@@ -1743,7 +1695,7 @@ function Bloque2_SSTT({
                       type="number" 
                       min="0" 
                       value={distanciaKm} 
-                      onChange={(e) => { setDistanciaKm(parseFloat(e.target.value) || 0); setIsDirty(true); }} 
+                      onChange={(e) => { setDistanciaKm(parseFloat(e.target.value) || 0);  }} 
                       className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white font-semibold text-slate-800"
                     />
                   </div>
@@ -1753,7 +1705,7 @@ function Bloque2_SSTT({
                       type="number" 
                       min="1" 
                       value={diasPermitidosCorte} 
-                      onChange={(e) => { setDiasPermitidosCorte(parseInt(e.target.value) || 1); setIsDirty(true); }} 
+                      onChange={(e) => { setDiasPermitidosCorte(parseInt(e.target.value) || 1);  }} 
                       className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white font-semibold text-slate-800"
                     />
                   </div>
@@ -1763,7 +1715,7 @@ function Bloque2_SSTT({
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">Condición de Trabajo / Ventana de Corte (Multiplicador de Riesgo)</label>
                   <select 
                     value={condicionTrabajo} 
-                    onChange={(e) => { setCondicionTrabajo(parseFloat(e.target.value)); setIsDirty(true); }}
+                    onChange={(e) => { setCondicionTrabajo(parseFloat(e.target.value));  }}
                     className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white font-semibold text-slate-800"
                   >
                     <option value={1.0}>Normal / Obra Nueva (1.0x)</option>
@@ -1796,7 +1748,7 @@ function Bloque2_SSTT({
                       type="number" 
                       min="0" 
                       value={gastosImprevistos} 
-                      onChange={(e) => { setGastosImprevistos(parseFloat(e.target.value) || 0); setIsDirty(true); }} 
+                      onChange={(e) => { setGastosImprevistos(parseFloat(e.target.value) || 0);  }} 
                       className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white font-semibold text-slate-800"
                     />
                   </div>
@@ -1806,7 +1758,7 @@ function Bloque2_SSTT({
                       type="number" 
                       min="0" 
                       value={margenImprevistosPorcentaje} 
-                      onChange={(e) => { setMargenImprevistosPorcentaje(parseFloat(e.target.value) || 0); setIsDirty(true); }} 
+                      onChange={(e) => { setMargenImprevistosPorcentaje(parseFloat(e.target.value) || 0);  }} 
                       className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white font-semibold text-slate-800"
                     />
                   </div>
@@ -1820,7 +1772,7 @@ function Bloque2_SSTT({
                       max="50"
                       step="0.5"
                       value={gastosAdminFinancieroPct}
-                      onChange={(e) => { setGastosAdminFinancieroPct(parseFloat(e.target.value) || 0); setIsDirty(true); }}
+                      onChange={(e) => { setGastosAdminFinancieroPct(parseFloat(e.target.value) || 0);  }}
                       className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 bg-white font-semibold text-slate-800"
                     />
                     <small className="text-[10px] text-slate-500 block mt-1 leading-tight">
@@ -1936,53 +1888,8 @@ function Bloque2_SSTT({
         onClose={() => setShowLogisticsModal(false)} 
         resultados={resultadosCalculados}
         currentOverrides={activeLogisticsOverrides}
-        onSave={(newOverrides) => { updateLogisticsOverrides(newOverrides); setIsDirty(true); }}
+        onSave={(newOverrides) => { updateLogisticsOverrides(newOverrides);  }}
       />
-
-      {showUnsavedChangesModal && (
-        <div className="modal-overlay" style={{position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(15, 23, 42, 0.4)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, backdropFilter: 'blur(4px)'}}>
-          <div className="odoo-card modal-content" style={{width:'500px', padding: '30px', textAlign: 'center'}}>
-            <h3 style={{ color: 'var(--accent)', marginBottom: '15px' }}>Cambios sin guardar</h3>
-            <p style={{ color: 'var(--text-primary)', marginBottom: '25px' }}>
-              Tienes cambios sin guardar en la cotización actual. ¿Deseas guardar la cotización actual antes de crear una nueva?
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <button 
-                className="primary-btn" 
-                onClick={async () => {
-                  if (!nombreCliente || !nombreProyecto) {
-                    alert("Por favor, ingresa el Cliente y Nombre de la Obra para poder guardar.");
-                    return;
-                  }
-                  await onGuardar();
-                  setShowUnsavedChangesModal(false);
-                  resetQuote();
-                }}
-                style={{ background: '#10b981' }}
-              >
-                Guardar y Crear Nueva
-              </button>
-              <button 
-                className="primary-btn" 
-                onClick={() => {
-                  setShowUnsavedChangesModal(false);
-                  resetQuote();
-                }}
-                style={{ background: '#ef4444' }}
-              >
-                Descartar cambios y Crear Nueva
-              </button>
-              <button 
-                className="remove-btn" 
-                onClick={() => setShowUnsavedChangesModal(false)}
-                style={{ background: 'rgba(255,255,255,0.1)', color: 'var(--text-primary)' }}
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

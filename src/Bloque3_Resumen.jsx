@@ -1,7 +1,5 @@
-import React from 'react';
-import { ShieldCheck, TrendingUp, DollarSign, Award, Calculator, ArrowRight, Layers, FileSpreadsheet } from 'lucide-react';
+import { ShieldCheck, TrendingUp, Award, Calculator, Layers, FileSpreadsheet } from 'lucide-react';
 import { exportarAExcelAuditable } from './utils/excelExport';
-import * as XLSX from 'xlsx';
 
 export default function Bloque3_Resumen({ 
   totalProcura = 0, 
@@ -16,8 +14,6 @@ export default function Bloque3_Resumen({
   gastosImprevistos = 0,
   esLicitacion = true,
   resultadosSSTT = null,
-  onGuardar,
-  isSaving,
   copilotRef
 }) {
   const granTotal = (Number(totalProcura) * tipoCambio || 0) + (Number(totalServicios) || 0);
@@ -185,7 +181,7 @@ export default function Bloque3_Resumen({
         moneda: monedaTrabajo,
       tasaCambio: tipoCambio
     };
-    console.log('DEBUG EXPORT - equiposProcesados count:', resultadosSSTT?.equiposProcesados?.length, 'serviciosAdaptados count:', serviciosAdaptados.length, 'first item costoFee:', serviciosAdaptados[0]?.costoFee, 'first item costoAmort:', serviciosAdaptados[0]?.costoAmort, 'first item precioVentaNeto:', serviciosAdaptados[0]?.precioVentaNeto, 'first item margen:', serviciosAdaptados[0]?.margen);
+    
     await exportarAExcelAuditable(estadoGlobal);
     
     if (copilotRef && copilotRef.current) {
