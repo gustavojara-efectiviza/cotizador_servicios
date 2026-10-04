@@ -27,10 +27,12 @@ import {
   Boxes,
   ChevronDown,
   ChevronUp,
-  Copy
+  Copy,
+  RotateCcw,
+  Save
 } from 'lucide-react';
 
-export default function EPCDashboard() {
+export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLab }) {
   const copilotRef = useRef(null);
 
   // Authentication State
@@ -51,7 +53,7 @@ export default function EPCDashboard() {
   const [rubro, setRubro] = useState('subestaciones'); // 'subestaciones', 'solar', 'movilidad'
   const [activeBlock, setActiveBlock] = useState(1); // Bloque activo para la secuencia (1, 2, 3)
 
-  // ESTADOS GLOBALES CONSOLIDADOS (Single Source of Truth — FASE 1)
+  // ESTADOS GLOBALES CONSOLIDADOS (Single Source of Truth)
   const [totalProcura, setTotalProcura] = useState(0);
   const [totalServicios, setTotalServicios] = useState(0);
 
@@ -72,7 +74,7 @@ export default function EPCDashboard() {
   const [detalleServicios, setDetalleServicios] = useState([]);
   const [resultadosSSTT, setResultadosSSTT] = useState(null);
 
-  // FUENTE DE VERDAD: Estados de Servicios SSTT (elevado desde Bloque2 — FASE 2)
+  // FUENTE DE VERDAD: Estados de Servicios SSTT (elevado desde Bloque2)
   const [cartServicios, setCartServicios] = useState([]);
   const [alquileresServicios, setAlquileresServicios] = useState([]);
   const [distanciaKm, setDistanciaKm] = useState(100);
@@ -101,8 +103,8 @@ export default function EPCDashboard() {
   // Estado del panel de cotizaciones guardadas
   const [showSavedQuotesPanel, setShowSavedQuotesPanel] = useState(false);
 
-  // Estado Colapsable UX TDAH
-  const [isBloque0Open, setIsBloque0Open] = useState(true);
+  // Estado Colapsable UX TDAH para Bloque 0
+  const [isBloque0Open, setIsBloque0Open] = useState(false);
 
   // Auto-colapsar Bloque 0 al avanzar a otros bloques
   useEffect(() => {
@@ -118,12 +120,13 @@ export default function EPCDashboard() {
 
   const guardarCotizacionMaestra = async () => {
     if (!nombreCliente.trim() || !nombreProyecto.trim()) {
-      showToast('Por favor, ingresa el Cliente y Nombre del Proyecto en el Bloque 0.', 'error');
+      setIsBloque0Open(true);
+      showToast('Por favor, ingresa el Cliente y Nombre del Proyecto en los Datos Generales.', 'error');
       return;
     }
-    // P5: Protección contra tipo de cambio 0 — evita gran total incorrecto silencioso
     if (!tipoCambioVenta || Number(tipoCambioVenta) <= 0) {
-      showToast('El tipo de cambio USD/PYG no puede ser 0. Verificá el Bloque 0 antes de guardar.', 'error');
+      setIsBloque0Open(true);
+      showToast('El tipo de cambio USD/PYG no puede ser 0. Verificá los Datos Generales.', 'error');
       return;
     }
     setIsSaving(true);
@@ -138,7 +141,6 @@ export default function EPCDashboard() {
         },
         detalleProcura: equiposProcura,
         detalleServicios,
-        // DATOS ELEVADOS FASE 2
         serviciosSST: {
           cart: cartServicios,
           alquileres: alquileresServicios,
@@ -159,8 +161,6 @@ export default function EPCDashboard() {
           granTotalGs: (totalProcura * tipoCambioVenta) + totalServicios,
           granTotalUSD: totalProcura + (totalServicios / tipoCambioVenta)
         },
-        // P4: Snapshot del tipo de cambio al momento de guardar
-        // Permite auditar el precio histórico sin depender del TC actual
         tipoCambioSnapshot: {
           compra: tipoCambioCompra,
           venta: tipoCambioVenta,
@@ -170,7 +170,7 @@ export default function EPCDashboard() {
 
       const returnedId = await upsertCotizacionV2(cotizacionId, dataToSave);
       setCotizacionId(returnedId);
-      showToast(cotizacionId ? 'Borrador actualizado con éxito' : 'Borrador guardado exitosamente');
+      showToast(cotizacionId ? '✓ Oferta actualizada con éxito' : '✓ Cotización guardada exitosamente');
       if (copilotRef.current) {
         copilotRef.current.celebrarExito('¡Guardado impecable! Cotización asegurada en la DB.');
       }
@@ -184,11 +184,13 @@ export default function EPCDashboard() {
 
   const guardarComoCopia = async () => {
     if (!nombreCliente.trim() || !nombreProyecto.trim()) {
-      showToast('Por favor, ingresa el Cliente y Nombre del Proyecto en el Bloque 0.', 'error');
+      setIsBloque0Open(true);
+      showToast('Por favor, ingresa el Cliente y Nombre del Proyecto en los Datos Generales.', 'error');
       return;
     }
     if (!tipoCambioVenta || Number(tipoCambioVenta) <= 0) {
-      showToast('El tipo de cambio USD/PYG no puede ser 0. Verificá el Bloque 0 antes de guardar.', 'error');
+      setIsBloque0Open(true);
+      showToast('El tipo de cambio USD/PYG no puede ser 0. Verificá los Datos Generales.', 'error');
       return;
     }
     setIsSaving(true);
@@ -229,10 +231,9 @@ export default function EPCDashboard() {
         }
       };
 
-      // Al enviar null como ID a upsertCotizacionV2, se crea un documento NUEVO en Firestore
       const newId = await upsertCotizacionV2(null, dataToSave);
       setCotizacionId(newId);
-      showToast(`¡Guardada como nueva copia independiente! (ID: ${newId.slice(0, 8)}...)`, 'success');
+      showToast(`¡Copia independiente guardada! (ID: ${newId.slice(0, 8)}...)`, 'success');
       if (copilotRef.current) {
         copilotRef.current.celebrarExito('¡Copia duplicada y guardada exitosamente!');
       }
@@ -244,9 +245,8 @@ export default function EPCDashboard() {
     }
   };
 
-  // FASE 3: REHIDRATACIÓN COMPLETA — Inyecta una cotización guardada en todos los estados centralizados
+  // Rehidratación completa de cotizaciones
   const handleLoadCotizacionV2 = (quote) => {
-    // --- Datos Generales (Bloque 0) ---
     const dg = quote.datosGenerales || {};
     setNombreCliente(dg.nombreCliente || quote.Cliente || '');
     setNombreProyecto(dg.nombreProyecto || quote.NombreObra || '');
@@ -254,11 +254,9 @@ export default function EPCDashboard() {
     setTipoCambioCompra(dg.tipoCambioCompra || 7400);
     setTipoCambioVenta(dg.tipoCambioVenta || 7500);
 
-    // --- Procura (Bloque 1) ---
     const procuraList = quote.detalleProcura || quote.equiposProcura || quote.procura || [];
     setEquiposProcura(Array.isArray(procuraList) ? procuraList : []);
 
-    // --- Servicios SSTT (Bloque 2) ---
     const sstt = quote.serviciosSST || {};
     const cartList = sstt.cart || quote.cart || quote.equiposCotizados || quote.detalleServicios || quote.servicios || [];
     setCartServicios(Array.isArray(cartList) ? cartList : []);
@@ -277,11 +275,9 @@ export default function EPCDashboard() {
     setGastosAdminFinancieroPct(sstt.gastosAdminFinancieroPct ?? quote.gastosAdminFinancieroPct ?? 6);
     setLogisticsOverrides(sstt.logisticsOverrides ?? quote.logisticsOverrides ?? { enabled: false });
 
-    // Restaurar el ID para que el próximo guardado haga UPDATE, no INSERT
     setCotizacionId(quote.id || null);
-
-    // Navegar al Bloque 1 para que el usuario vea el estado cargado
     setActiveBlock(1);
+    setIsBloque0Open(false);
     setShowSavedQuotesPanel(false);
     showToast(`✅ Cotización "${dg.nombreProyecto || quote.NombreObra || 'Sin nombre'}" cargada.`);
   };
@@ -306,28 +302,23 @@ export default function EPCDashboard() {
     setTotalProcura(0);
     setTotalServicios(0);
     setActiveBlock(1);
+    setIsBloque0Open(true);
     showToast('✨ Nueva cotización en blanco iniciada.');
   };
 
-  // Nombres descriptivos para la UI
-  const perfiles = {
-    b2b: { title: 'Suministro Privado B2B', badge: 'B2B Private', color: '#3b82f6', desc: 'Cotización orientada a venta directa de suministros y proyectos privados sin burocracia licitatoria.' },
-    epc: { title: 'Licitación Corporativa / EPC', badge: 'Corporate EPC', color: '#8b5cf6', desc: 'Llave en mano integral para grandes cuentas, pliegos públicos y estructuras de contingencia avanzada.' }
-  };
-
   const rubros = {
-    subestaciones: { name: 'Subestaciones de Potencia AT/MT', icon: Zap, detail: 'Transformación, Celdas GIS/Metalclad y Patios de Maniobra' },
-    solar: { name: 'Parques Fotovoltaicos / Solar', icon: Sun, detail: 'Inversores centralizados, campos de paneles y BESS' },
-    movilidad: { name: 'Movilidad Eléctrica / Infraestructura EV', icon: Truck, detail: 'Electrolineras de carga rápida y subestaciones dedicadas' }
+    subestaciones: { name: 'Subestaciones', icon: Zap },
+    solar: { name: 'Solar / FV', icon: Sun },
+    movilidad: { name: 'Movilidad EV', icon: Truck }
   };
 
   const RubroIcon = rubros[rubro].icon;
 
   if (authLoading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', gap: '20px', height: '100vh', background: '#0f172a', color: '#ffffff' }}>
+      <div className="flex flex-col items-center justify-center gap-4 h-screen bg-[#090d16] text-white font-sans">
         <Zap color="#3b82f6" size={48} className="animate-pulse" />
-        <h2>Verificando credenciales...</h2>
+        <h2 className="text-sm font-semibold text-slate-300">Verificando credenciales...</h2>
       </div>
     );
   }
@@ -337,326 +328,230 @@ export default function EPCDashboard() {
   }
 
   return (
-    <div className="app-container" style={{ minHeight: '100vh', background: '#f8fafc', color: '#1e293b' }}>
+    <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col font-sans">
       
-      {/* 1. CABECERA MAESTRA CON CONTROLES GLOBALMENTE SINCRONIZADOS */}
-      <header className="header" style={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        gap: '15px', 
-        padding: '20px 40px', 
-        background: '#ffffff', 
-        borderBottom: '1px solid #e2e8f0',
-        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.03)'
-      }}>
+      {/* ========================================================================= */}
+      {/* 1. EL HEADER MAESTRO (BARRA OSCURA, MATE Y PLANA — VERCEL/LINEAR STYLE) */}
+      {/* ========================================================================= */}
+      <header className="h-16 w-full bg-[#090d16] border-b border-slate-800 px-6 flex items-center justify-between select-none z-50 sticky top-0">
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ background: '#eff6ff', padding: '10px', borderRadius: '10px', border: '1px solid #bfdbfe' }}>
-              <Zap color="#2563eb" size={30} />
+        {/* [ ZONA IZQUIERDA: MARCA Y CONTEXTO ] */}
+        <div className="flex items-center gap-4 shrink-0">
+          
+          {/* Logo & Marca */}
+          <div className="flex items-center gap-2.5">
+            <div className="bg-white px-2 py-0.5 rounded-sm flex items-center shadow-xs">
+              <img 
+                src="/logo-beigel.png" 
+                alt="Beigel" 
+                className="h-5 w-auto block object-contain" 
+              />
             </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 700, color: '#0f172a' }}>Módulo EPC Integrado</h1>
-                <span style={{ background: '#dbeafe', color: '#1e40af', fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px', borderRadius: '12px' }}>V2 SPA</span>
-              </div>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>Consolidador Maestro Procura + Servicios SSTT + Matriz de Riesgos</p>
+            <div className="hidden xl:flex flex-col justify-center leading-none">
+              <span className="text-xs font-bold text-white tracking-wide">Cotizador</span>
+              <span className="text-[9px] font-medium text-slate-400">by Efectiviza</span>
             </div>
           </div>
 
-          {/* SELECTOR DE RUBRO + ACCIONES GLOBALES */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span className="text-slate-700 hidden sm:inline select-none">/</span>
 
-            {/* Selector de rubro */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f1f5f9', padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-              <Boxes size={18} color="#475569" />
-              <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>Rubro / Sector:</label>
-              <select 
-                value={rubro} 
-                onChange={(e) => setRubro(e.target.value)}
-                style={{ 
-                  border: 'none', 
-                  background: 'transparent', 
-                  fontWeight: 700, 
-                  color: '#0f172a', 
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  outline: 'none',
-                  padding: '4px 8px'
-                }}
-              >
-                <option value="subestaciones">Subestaciones de Potencia AT/MT</option>
-                <option value="solar">Parques Fotovoltaicos / Solar</option>
-                <option value="movilidad">Movilidad Eléctrica / Electrolineras</option>
-              </select>
-            </div>
-
-            {/* Botón Guardar / Actualizar */}
-            <button
-              onClick={guardarCotizacionMaestra}
-              disabled={isSaving}
-              style={{
-                border: 'none',
-                background: isSaving ? '#94a3b8' : (cotizacionId ? '#2563eb' : '#10b981'),
-                color: '#ffffff',
-                padding: '10px 18px',
-                borderRadius: '8px',
-                fontWeight: 800,
-                fontSize: '0.9rem',
-                cursor: isSaving ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                boxShadow: isSaving ? 'none' : (cotizacionId ? '0 4px 14px rgba(37,99,235,0.35)' : '0 4px 14px rgba(16,185,129,0.4)'),
-                transition: 'all 0.2s',
-                transform: isSaving ? 'scale(0.98)' : 'scale(1)'
-              }}
-              title={cotizacionId ? 'Actualizar esta oferta existente en la base de datos' : 'Guardar cotización'}
-              onMouseEnter={e => !isSaving && (e.currentTarget.style.transform = 'scale(1.02)')}
-              onMouseLeave={e => !isSaving && (e.currentTarget.style.transform = 'scale(1)')}
+          {/* Selector de Rubro (Texto Plano Sutil) */}
+          <div className="flex items-center gap-1">
+            <RubroIcon size={13} className="text-slate-400 shrink-0" />
+            <select 
+              value={rubro} 
+              onChange={(e) => setRubro(e.target.value)}
+              className="text-slate-400 hover:text-slate-200 text-xs font-medium bg-transparent border-none focus:ring-0 cursor-pointer pr-1 transition-colors"
             >
-              💾 {isSaving ? 'Guardando...' : (cotizacionId ? 'Actualizar Oferta' : 'Guardar Cotización')}
-            </button>
+              <option value="subestaciones" className="bg-[#090d16] text-slate-200">Subestaciones</option>
+              <option value="solar" className="bg-[#090d16] text-slate-200">Solar / FV</option>
+              <option value="movilidad" className="bg-[#090d16] text-slate-200">Movilidad EV</option>
+            </select>
+          </div>
 
-            {/* Botón Guardar como Copia (permite crear oferta2 sin tocar oferta1) */}
-            {cotizacionId && (
-              <button
-                onClick={guardarComoCopia}
-                disabled={isSaving}
-                style={{
-                  border: '1px solid #10b981',
-                  background: isSaving ? '#f1f5f9' : '#ecfdf5',
-                  color: '#059669',
-                  padding: '10px 16px',
-                  borderRadius: '8px',
-                  fontWeight: 800,
-                  fontSize: '0.9rem',
-                  cursor: isSaving ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'all 0.2s',
-                  boxShadow: '0 2px 8px rgba(16,185,129,0.15)'
-                }}
-                title="Crea una nueva oferta independiente sin sobreescribir la original"
-                onMouseEnter={e => !isSaving && (e.currentTarget.style.transform = 'scale(1.02)')}
-                onMouseLeave={e => !isSaving && (e.currentTarget.style.transform = 'scale(1)')}
-              >
-                <Copy size={16} /> Guardar como Copia
-              </button>
-            )}
+          <span className="text-slate-700 hidden lg:inline select-none">•</span>
 
-            {/* Botón Nueva Cotización */}
-            <button
-              onClick={nuevaCotizacion}
-              style={{
-                border: '1px solid #cbd5e1',
-                background: '#ffffff',
-                color: '#1e40af',
-                padding: '10px 16px',
-                borderRadius: '8px',
-                fontWeight: 700,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#3b82f6'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#ffffff'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
+          {/* Selector de Perfil Comercial (Texto Plano Sutil) */}
+          <div className="hidden lg:flex items-center gap-1.5 text-xs font-medium text-slate-400">
+            <span className="text-slate-500 font-mono text-[11px]">Perfil:</span>
+            <button 
+              type="button"
+              onClick={() => setPerfilComercial('b2b')}
+              className={`cursor-pointer transition-colors ${perfilComercial === 'b2b' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'}`}
+              title="Suministro Privado B2B"
             >
-              ✨ Nueva Cotización
+              B2B
             </button>
-
-            {/* Botón Mis Cotizaciones */}
-            <button
-              onClick={() => setShowSavedQuotesPanel(true)}
-              style={{
-                border: '1px solid #e2e8f0',
-                background: '#f8fafc',
-                color: '#475569',
-                padding: '10px 16px',
-                borderRadius: '8px',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#93c5fd'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+            <span className="text-slate-700 select-none">/</span>
+            <button 
+              type="button"
+              onClick={() => setPerfilComercial('epc')}
+              className={`cursor-pointer transition-colors ${perfilComercial === 'epc' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'}`}
+              title="Licitación Corporativa / EPC"
             >
-              📂 Mis Cotizaciones
+              EPC
             </button>
-
           </div>
         </div>
 
-        {/* SWITCH INTERACTIVO DE PERFIL COMERCIAL */}
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
-          background: '#f8fafc', 
-          padding: '12px 20px', 
-          borderRadius: '8px', 
-          border: '1px solid #e2e8f0',
-          flexWrap: 'wrap',
-          gap: '15px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Briefcase size={20} color={perfiles[perfilComercial].color} />
-            <div>
-              <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                Perfil Comercial Seleccionado: <span style={{ color: perfiles[perfilComercial].color }}>{perfiles[perfilComercial].title}</span>
+        {/* [ ZONA CENTRO: PESTAÑAS DE NAVEGACIÓN PLANAS (TABS) ] */}
+        <div className="flex items-center h-full gap-8">
+          <button
+            type="button"
+            onClick={() => setActiveBlock(1)}
+            className={`h-full flex items-center gap-2 text-sm transition-colors cursor-pointer border-b-2 ${
+              activeBlock === 1
+                ? 'text-white font-semibold border-blue-500'
+                : 'text-slate-400 hover:text-slate-200 font-medium border-transparent'
+            }`}
+          >
+            <ShoppingCart size={14} className={activeBlock === 1 ? 'text-blue-400' : 'text-slate-400'} />
+            <span>1. Procura</span>
+            {equiposProcura.length > 0 && (
+              <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.2 rounded font-mono">
+                {equiposProcura.length}
               </span>
-              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{perfiles[perfilComercial].desc}</span>
-            </div>
-          </div>
+            )}
+          </button>
 
-          <div style={{ display: 'flex', background: '#e2e8f0', borderRadius: '25px', padding: '4px' }}>
-            <button 
-              onClick={() => setPerfilComercial('b2b')}
-              style={{
-                border: 'none',
-                padding: '8px 18px',
-                borderRadius: '20px',
-                fontWeight: 600,
-                fontSize: '0.85rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                background: perfilComercial === 'b2b' ? '#3b82f6' : 'transparent',
-                color: perfilComercial === 'b2b' ? '#ffffff' : '#475569',
-                boxShadow: perfilComercial === 'b2b' ? '0 2px 4px rgba(59,130,246,0.3)' : 'none'
-              }}
+          <button
+            type="button"
+            onClick={() => setActiveBlock(2)}
+            className={`h-full flex items-center gap-2 text-sm transition-colors cursor-pointer border-b-2 ${
+              activeBlock === 2
+                ? 'text-white font-semibold border-blue-500'
+                : 'text-slate-400 hover:text-slate-200 font-medium border-transparent'
+            }`}
+          >
+            <Wrench size={14} className={activeBlock === 2 ? 'text-blue-400' : 'text-slate-400'} />
+            <span>2. Servicios SSTT</span>
+            {cartServicios.length > 0 && (
+              <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.2 rounded font-mono">
+                {cartServicios.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveBlock(3)}
+            className={`h-full flex items-center gap-2 text-sm transition-colors cursor-pointer border-b-2 ${
+              activeBlock === 3
+                ? 'text-white font-semibold border-blue-500'
+                : 'text-slate-400 hover:text-slate-200 font-medium border-transparent'
+            }`}
+          >
+            <ShieldCheck size={14} className={activeBlock === 3 ? 'text-blue-400' : 'text-slate-400'} />
+            <span>3. Consolidación</span>
+          </button>
+        </div>
+
+        {/* [ ZONA DERECHA: ACCIONES GLOBALES ] */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          
+          {/* Selector de versión sutil */}
+          {onSwitchVersion && (
+            <button
+              type="button"
+              onClick={() => onSwitchVersion('v1')}
+              className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors hidden md:flex items-center gap-1 cursor-pointer"
+              title="Cambiar a Versión 1 Tradicional"
             >
-              🏢 Suministro Privado B2B
+              <Sliders size={12} />
+              <span>V1</span>
             </button>
-            <button 
-              onClick={() => setPerfilComercial('epc')}
-              style={{
-                border: 'none',
-                padding: '8px 18px',
-                borderRadius: '20px',
-                fontWeight: 600,
-                fontSize: '0.85rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                background: perfilComercial === 'epc' ? '#8b5cf6' : 'transparent',
-                color: perfilComercial === 'epc' ? '#ffffff' : '#475569',
-                boxShadow: perfilComercial === 'epc' ? '0 2px 4px rgba(139,92,246,0.3)' : 'none'
-              }}
+          )}
+
+          {/* Enlace fantasma: Mis Cotizaciones */}
+          <button
+            type="button"
+            onClick={() => setShowSavedQuotesPanel(true)}
+            className="text-slate-300 hover:text-white hover:bg-slate-800/50 px-3 py-2 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Abrir historial de cotizaciones"
+          >
+            <span>📂</span>
+            <span className="hidden sm:inline">Mis Cotizaciones</span>
+          </button>
+
+          {/* Enlace fantasma: Lab Precios */}
+          {onOpenLab && (
+            <button
+              type="button"
+              onClick={onOpenLab}
+              className="text-slate-300 hover:text-white hover:bg-slate-800/50 px-3 py-2 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Abrir Laboratorio de Costo de Activos"
             >
-              🏛️ Licitación Corporativa / EPC
+              <span>🧪</span>
+              <span className="hidden sm:inline">Lab Precios</span>
             </button>
-          </div>
+          )}
+
+          {/* ÚNICO BOTÓN SÓLIDO (Guardar) */}
+          <button
+            type="button"
+            onClick={guardarCotizacionMaestra}
+            disabled={isSaving}
+            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-md text-xs font-semibold shadow-sm transition-all ml-2 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+            title={cotizacionId ? 'Actualizar oferta existente' : 'Guardar nueva cotización'}
+          >
+            <span>💾</span>
+            <span>{isSaving ? 'Guardando...' : (cotizacionId ? 'Actualizar' : 'Guardar')}</span>
+          </button>
+
+          {/* Enlace fantasma Copia si cotizacionId existe */}
+          {cotizacionId && (
+            <button
+              type="button"
+              onClick={guardarComoCopia}
+              disabled={isSaving}
+              className="text-emerald-400 hover:text-emerald-300 hover:bg-slate-800/50 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors hidden xl:flex items-center gap-1 cursor-pointer"
+              title="Guardar como nueva copia independiente"
+            >
+              <Copy size={12} />
+              <span>Copia</span>
+            </button>
+          )}
+
+          {/* Botón Reset / Nuevo */}
+          <button
+            type="button"
+            onClick={nuevaCotizacion}
+            className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 p-2 rounded-md transition-colors cursor-pointer ml-1"
+            title="Iniciar nueva cotización en blanco"
+          >
+            <RotateCcw size={14} />
+          </button>
+
         </div>
 
       </header>
 
-      {/* 2. BARRA DE NAVEGACIÓN SECUENCIAL (STEPPER DE 3 BLOQUES) */}
-      <div style={{ background: '#ffffff', borderBottom: '1px solid #e2e8f0', padding: '10px 40px' }}>
-        <div style={{ display: 'flex', gap: '15px', maxWidth: '1200px', margin: '0 auto' }}>
-          
-          {[
-            { id: 1, title: 'Bloque 1: Procura & Landed Cost', subtitle: 'Equipos principales e Importación', icon: ShoppingCart },
-            { id: 2, title: 'Bloque 2: Servicios & SSTT', subtitle: 'Encapsulamiento Motor V1', icon: Wrench },
-            { id: 3, title: 'Bloque 3: Consolidación & Riesgos', subtitle: 'Margen EPC, Imprevistos y Garantías', icon: ShieldCheck }
-          ].map((block) => {
-            const Icon = block.icon;
-            const isActive = activeBlock === block.id;
-            return (
-              <div 
-                key={block.id} 
-                onClick={() => setActiveBlock(block.id)}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '12px 16px',
-                  borderRadius: '8px',
-                  border: isActive ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                  background: isActive ? '#eff6ff' : '#f8fafc',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-              >
-                <div style={{ 
-                  background: isActive ? '#2563eb' : '#cbd5e1', 
-                  color: '#ffffff', 
-                  width: '32px', 
-                  height: '32px', 
-                  borderRadius: '50%', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  fontWeight: 700,
-                  fontSize: '0.9rem'
-                }}>
-                  {block.id}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: isActive ? '#1e40af' : '#334155' }}>{block.title}</div>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{block.subtitle}</div>
-                </div>
-                <Icon size={20} color={isActive ? '#2563eb' : '#94a3b8'} />
-              </div>
-            );
-          })}
+      {/* ========================================================================= */}
+      {/* 2. BARRA DE RESUMEN DEL PROYECTO (BLOQUE 0 TRANSICIÓN ELEGANTE) */}
+      {/* ========================================================================= */}
+      <Bloque0_Setup
+        nombreCliente={nombreCliente}
+        setNombreCliente={setNombreCliente}
+        nombreProyecto={nombreProyecto}
+        setNombreProyecto={setNombreProyecto}
+        monedaTrabajo={monedaTrabajo}
+        setMonedaTrabajo={setMonedaTrabajo}
+        tipoCambioCompra={tipoCambioCompra}
+        setTipoCambioCompra={setTipoCambioCompra}
+        tipoCambioVenta={tipoCambioVenta}
+        setTipoCambioVenta={setTipoCambioVenta}
+        isOpen={isBloque0Open}
+        setIsOpen={setIsBloque0Open}
+      />
 
-        </div>
-      </div>
-
-      {/* 3. ÁREA PRINCIPAL CON RENDERIZADO SECUENCIAL DE LOS 3 BLOQUES */}
-      <main style={{ padding: '30px 40px', maxWidth: '1400px', margin: '0 auto', width: '100%', flex: 1 }}>
+      {/* ========================================================================= */}
+      {/* 3. ARMONÍA DEL LIENZO (BODY & MAIN CONTENT) */}
+      {/* ========================================================================= */}
+      <main className="pt-6 px-6 mx-auto max-w-screen-2xl w-full flex-1 flex flex-col gap-6">
         
-        {/* PASO 1: CONFIGURACIÓN Y PROCURA */}
+        {/* ================= PASO 1: PROCURA & LANDED COST ================= */}
         {activeBlock === 1 && (
-          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            
-            {/* BLOQUE 0: SETUP */}
-            <div className="odoo-card" style={{ borderTop: '4px solid #1e293b' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                <div style={{ background: '#f1f5f9', padding: '6px', borderRadius: '6px' }}>
-                  <Sliders size={20} color="#475569" />
-                </div>
-                <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#1e293b', fontWeight: 700 }}>
-                  Configuración General del Proyecto
-                </h2>
-              </div>
-              <Bloque0_Setup
-                nombreCliente={nombreCliente}
-                setNombreCliente={setNombreCliente}
-                nombreProyecto={nombreProyecto}
-                setNombreProyecto={setNombreProyecto}
-                monedaTrabajo={monedaTrabajo}
-                setMonedaTrabajo={setMonedaTrabajo}
-                tipoCambioCompra={tipoCambioCompra}
-                setTipoCambioCompra={setTipoCambioCompra}
-                tipoCambioVenta={tipoCambioVenta}
-                setTipoCambioVenta={setTipoCambioVenta}
-              />
-            </div>
-            
-            {/* BANNER INFORMATIVO DE SECTOR */}
-            <div className="odoo-card" style={{ borderLeft: '4px solid #2563eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                <RubroIcon size={28} color="#2563eb" />
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a' }}>Sector Activo: {rubros[rubro].name}</h3>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>{rubros[rubro].detail}</p>
-                </div>
-              </div>
-              <span style={{ background: '#f1f5f9', padding: '6px 12px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>
-                Modo: {perfiles[perfilComercial].badge}
-              </span>
-            </div>
-
-            {/* BLOQUE 1: PROCURA */}
+          <div className="animate-fade-in flex flex-col gap-6">
             <Bloque1_Procura 
               equipos={equiposProcura}
               setEquipos={setEquiposProcura}
@@ -670,108 +565,92 @@ export default function EPCDashboard() {
               isSaving={isSaving}
             />
 
-            {/* NAVEGACIÓN PASO 1 */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+            <div className="flex justify-end pt-2">
               <button 
-                className="primary-btn animate-fade-in" 
+                type="button"
+                className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-6 py-2 rounded-lg text-sm font-medium shadow-sm transition-all ml-auto flex items-center gap-2 cursor-pointer" 
                 onClick={() => setActiveBlock(2)}
-                style={{ width: 'auto', padding: '12px 28px', background: '#2563eb', fontSize: '1.05rem', boxShadow: '0 4px 14px rgba(37,99,235,0.3)' }}
               >
-                Siguiente: Servicios Técnicos (SSTT) <ChevronRight size={20} />
+                <span>Siguiente: Servicios Técnicos (SSTT)</span>
+                <ChevronRight size={16} />
               </button>
             </div>
           </div>
         )}
 
-        {/* PASO 2: SERVICIOS Y SSTT */}
+        {/* ================= PASO 2: SERVICIOS Y SSTT ================= */}
         {activeBlock === 2 && (
-          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div className="odoo-card" style={{ 
-              background: '#ffffff', 
-              border: '2px solid #3b82f6', 
-              boxShadow: '0 10px 25px -5px rgba(59,130,246,0.1)' 
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-                <h2 style={{ color: '#1e40af', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <Wrench color="#2563eb" size={24} /> Bloque 2: Servicios Especializados & SSTT
+          <div className="animate-fade-in flex flex-col gap-6">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 md:p-6">
+              <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-200">
+                <h2 className="text-blue-900 font-bold text-base flex items-center gap-2 m-0">
+                  <Wrench color="#2563eb" size={20} /> Bloque 2: Servicios Especializados & SSTT
                 </h2>
-                <span style={{ 
-                  background: '#dbeafe', 
-                  color: '#1e40af', 
-                  padding: '6px 14px', 
-                  borderRadius: '20px', 
-                  fontWeight: 700, 
-                  fontSize: '0.85rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  border: '1px solid #bfdbfe'
-                }}>
+                <span className="bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-md font-semibold border border-blue-200/60">
                   ⚡ Suite V1 Activa
                 </span>
               </div>
               
-              <div style={{ margin: '20px 0' }}>
-                <Bloque2_SSTT 
-                  cart={cartServicios}
-                  setCart={setCartServicios}
-                  alquileres={alquileresServicios}
-                  setAlquileres={setAlquileresServicios}
-                  distanciaKm={distanciaKm}
-                  setDistanciaKm={setDistanciaKm}
-                  diasPermitidosCorte={diasPermitidosCorte}
-                  setDiasPermitidosCorte={setDiasPermitidosCorte}
-                  gastosImprevistos={gastosImprevistos}
-                  setGastosImprevistos={setGastosImprevistos}
-                  margenImprevistosPorcentaje={margenImprevistosPorcentaje}
-                  setMargenImprevistosPorcentaje={setMargenImprevistosPorcentaje}
-                  condicionTrabajo={condicionTrabajo}
-                  setCondicionTrabajo={setCondicionTrabajo}
-                  aplicarGastosIndirectos={aplicarGastosIndirectos}
-                  setAplicarGastosIndirectos={setAplicarGastosIndirectos}
-                  aplicarSSMAProvision={aplicarSSMAProvision}
-                  setAplicarSSMAProvision={setAplicarSSMAProvision}
-                  porcentajeSSMAProvision={porcentajeSSMAProvision}
-                  setPorcentajeSSMAProvision={setPorcentajeSSMAProvision}
-                  gastosAdminFinancieroPct={gastosAdminFinancieroPct}
-                  setGastosAdminFinancieroPct={setGastosAdminFinancieroPct}
-                  logisticsOverrides={logisticsOverrides}
-                  setLogisticsOverrides={setLogisticsOverrides}
-                  setTotalServicios={setTotalServicios} 
-                  setDetalleServicios={setDetalleServicios} 
-                  setResultadosSSTT={setResultadosSSTT}
-                  monedaTrabajo={monedaTrabajo}
-                  tipoCambio={tipoCambioVenta}
-                  nombreCliente={nombreCliente}
-                  nombreProyecto={nombreProyecto}
-                  onGuardar={guardarCotizacionMaestra}
-                  isSaving={isSaving}
-                />
-              </div>
+              <Bloque2_SSTT 
+                cart={cartServicios}
+                setCart={setCartServicios}
+                alquileres={alquileresServicios}
+                setAlquileres={setAlquileresServicios}
+                distanciaKm={distanciaKm}
+                setDistanciaKm={setDistanciaKm}
+                diasPermitidosCorte={diasPermitidosCorte}
+                setDiasPermitidosCorte={setDiasPermitidosCorte}
+                gastosImprevistos={gastosImprevistos}
+                setGastosImprevistos={setGastosImprevistos}
+                margenImprevistosPorcentaje={margenImprevistosPorcentaje}
+                setMargenImprevistosPorcentaje={setMargenImprevistosPorcentaje}
+                condicionTrabajo={condicionTrabajo}
+                setCondicionTrabajo={setCondicionTrabajo}
+                aplicarGastosIndirectos={aplicarGastosIndirectos}
+                setAplicarGastosIndirectos={setAplicarGastosIndirectos}
+                aplicarSSMAProvision={aplicarSSMAProvision}
+                setAplicarSSMAProvision={setAplicarSSMAProvision}
+                porcentajeSSMAProvision={porcentajeSSMAProvision}
+                setPorcentajeSSMAProvision={setPorcentajeSSMAProvision}
+                gastosAdminFinancieroPct={gastosAdminFinancieroPct}
+                setGastosAdminFinancieroPct={setGastosAdminFinancieroPct}
+                logisticsOverrides={logisticsOverrides}
+                setLogisticsOverrides={setLogisticsOverrides}
+                setTotalServicios={setTotalServicios} 
+                setDetalleServicios={setDetalleServicios} 
+                setResultadosSSTT={setResultadosSSTT}
+                monedaTrabajo={monedaTrabajo}
+                tipoCambio={tipoCambioVenta}
+                nombreCliente={nombreCliente}
+                nombreProyecto={nombreProyecto}
+                onGuardar={guardarCotizacionMaestra}
+                isSaving={isSaving}
+              />
 
-              {/* NAVEGACIÓN PASO 2 */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '30px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
+              <div className="flex justify-end items-center gap-3 mt-8 pt-4 border-t border-slate-200">
                 <button 
+                  type="button"
                   onClick={() => setActiveBlock(1)}
-                  style={{ background: 'transparent', border: 'none', color: '#64748b', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.95rem' }}
+                  className="bg-transparent text-slate-500 hover:text-slate-700 px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer"
                 >
                   ← Atrás (Procura)
                 </button>
                 <button 
-                  className="primary-btn" 
+                  type="button"
+                  className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-6 py-2 rounded-lg text-sm font-medium shadow-sm transition-all cursor-pointer flex items-center gap-2" 
                   onClick={() => setActiveBlock(3)}
-                  style={{ width: 'auto', padding: '12px 28px', background: '#2563eb', fontSize: '1.05rem', boxShadow: '0 4px 14px rgba(37,99,235,0.3)' }}
                 >
-                  Siguiente: Resumen de Cotización <ChevronRight size={20} />
+                  <span>Siguiente: Resumen de Cotización</span>
+                  <ChevronRight size={16} />
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* PASO 3: CONSOLIDACIÓN Y EXPORTACIÓN */}
+        {/* ================= PASO 3: CONSOLIDACIÓN Y CIERRE ================= */}
         {activeBlock === 3 && (
-          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="animate-fade-in flex flex-col gap-6">
             <Bloque3_Resumen 
               totalProcura={totalProcura} 
               totalServicios={totalServicios} 
@@ -790,29 +669,22 @@ export default function EPCDashboard() {
               copilotRef={copilotRef}
             />
             
-            {/* NAVEGACIÓN PASO 3 */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
+            <div className="flex justify-between items-center pt-4 mt-8 border-t border-slate-200">
               <button 
+                type="button"
                 onClick={() => setActiveBlock(2)}
-                style={{ background: 'transparent', border: 'none', color: '#64748b', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.95rem' }}
+                className="bg-transparent text-slate-500 hover:text-slate-700 px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer"
               >
                 ← Atrás (Servicios Técnicos)
               </button>
               <button 
-                className="primary-btn" 
+                type="button"
                 onClick={guardarCotizacionMaestra}
                 disabled={isSaving}
-                style={{ 
-                  width: 'auto', 
-                  padding: '12px 30px', 
-                  background: '#10b981', 
-                  fontSize: '1.05rem', 
-                  boxShadow: '0 4px 14px rgba(16,185,129,0.4)',
-                  opacity: isSaving ? 0.7 : 1,
-                  cursor: isSaving ? 'not-allowed' : 'pointer'
-                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl text-base font-bold shadow-md transition-all ml-auto flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                💾 {isSaving ? 'Guardando...' : 'Finalizar y Guardar Cotización'}
+                <Save size={18} />
+                <span>{isSaving ? 'Guardando...' : 'Finalizar y Guardar Cotización'}</span>
               </button>
             </div>
           </div>
@@ -829,23 +701,9 @@ export default function EPCDashboard() {
 
       {/* FLOATING TOAST NOTIFICATION */}
       {toast.show && (
-        <div style={{
-          position: 'fixed',
-          bottom: '25px',
-          right: '25px',
-          background: toast.type === 'error' ? '#ef4444' : '#10b981',
-          color: '#ffffff',
-          padding: '14px 24px',
-          borderRadius: '8px',
-          boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
-          zIndex: 9999,
-          fontWeight: 700,
-          fontSize: '0.95rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          {toast.type === 'error' ? '❌' : '✅'} {toast.message}
+        <div className="fixed bottom-6 right-6 z-[9999] bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-2xl font-bold text-sm flex items-center gap-2 border border-emerald-400/30 animate-fadeIn">
+          <span>{toast.type === 'error' ? '❌' : '✅'}</span>
+          <span>{toast.message}</span>
         </div>
       )}
 

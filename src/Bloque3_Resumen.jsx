@@ -194,113 +194,91 @@ export default function Bloque3_Resumen({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
+    <div className="flex flex-col gap-6">
       
       {/* CABECERA BLOQUE 3 CON BOTÓN DE EXPORTACIÓN AUDITABLE */}
-      <div className="odoo-card" style={{ background: '#ffffff', borderLeft: '4px solid #8b5cf6' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <div style={{ background: '#f3e8ff', padding: '12px', borderRadius: '10px', border: '1px solid #d8b4fe' }}>
-              <ShieldCheck color="#8b5cf6" size={28} />
+      <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-6">
+        <div className="flex justify-between items-center flex-wrap gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+              <ShieldCheck size={22} />
             </div>
             <div>
-              <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#0f172a' }}>Bloque 3: Consolidación EPC, Garantías & Matriz de Riesgos</h2>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>
+              <h2 className="m-0 text-base font-bold text-slate-900">Bloque 3: Consolidación EPC, Garantías & Matriz de Riesgos</h2>
+              <p className="m-0 text-xs text-slate-500">
                 Consolidación unificada de la oferta comercial (Procura Bloque 1 + Servicios SSTT Bloque 2)
               </p>
             </div>
           </div>
 
-          {/* BOTÓN ÚNICO DE ACCIÓN: EXPORTAR ENTREGABLE */}
-          <div style={{ display: 'flex', gap: '10px' }}>
+          {/* BOTÓN SECUNDARIO ELEGANTE: EXPORTAR ENTREGABLE */}
+          <div className="flex gap-2.5">
             <button 
+              type="button"
               onClick={handleExportExcel}
-              style={{
-                width: 'auto',
-                padding: '14px 28px',
-                background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)',
-                color: '#ffffff',
-                borderRadius: '12px',
-                fontWeight: 800,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                boxShadow: '0 6px 20px rgba(234, 88, 12, 0.4)',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '1.05rem',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                transition: 'all 0.3s ease',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
-                e.currentTarget.style.boxShadow = '0 8px 25px rgba(234, 88, 12, 0.5)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                e.currentTarget.style.boxShadow = '0 6px 20px rgba(234, 88, 12, 0.4)';
-              }}
+              className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg text-sm font-semibold shadow-sm flex items-center gap-2 transition-all cursor-pointer"
+              title="Descargar planilla Excel técnica auditable con todas las memorias de cálculo"
             >
-              <FileSpreadsheet size={22} /> Exportar Entregable Excel (.xlsx)
+              <FileSpreadsheet size={16} className="text-emerald-600" />
+              <span>Exportar Entregable Excel (.xlsx)</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* TARJETAS DE MÉTRICAS CONSOLIDADAS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         
         {/* TARJETA 1: PROCURA */}
-        <div className="odoo-card" style={{ background: '#ffffff', borderTop: '4px solid #2563eb' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e40af', textTransform: 'uppercase' }}>
+        <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-5">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">
               Suministros & Procura (B1)
             </span>
-            <div style={{ background: '#eff6ff', padding: '6px', borderRadius: '6px' }}>
-              <Layers size={20} color="#2563eb" />
+            <div className="bg-blue-50 p-1.5 rounded-md text-blue-600">
+              <Layers size={18} />
             </div>
           </div>
-          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.6rem', fontWeight: 800, color: '#0f172a' }}>
+          <h3 className="m-0 mb-2 text-2xl font-extrabold text-slate-900">
             {formatMoneda(totalProcura * tipoCambio)}
           </h3>
-          <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>
+          <p className="m-0 text-xs text-slate-500">
             {detalleProcura.length} equipo(s) auditables en planilla de importación.
           </p>
         </div>
 
         {/* TARJETA 2: SERVICIOS */}
-        <div className="odoo-card" style={{ background: '#ffffff', borderTop: '4px solid #10b981' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#065f46', textTransform: 'uppercase' }}>
+        <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-5">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
               Servicios Especializados & SSTT (B2)
             </span>
-            <div style={{ background: '#d1fae5', padding: '6px', borderRadius: '6px' }}>
-              <Calculator size={20} color="#10b981" />
+            <div className="bg-emerald-50 p-1.5 rounded-md text-emerald-600">
+              <Calculator size={18} />
             </div>
           </div>
-          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.6rem', fontWeight: 800, color: '#0f172a' }}>
+          <h3 className="m-0 mb-2 text-2xl font-extrabold text-slate-900">
             {formatMoneda(totalServicios)}
           </h3>
-          <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>
+          <p className="m-0 text-xs text-slate-500">
             {detalleServicios.length} servicio(s) auditables en carrito técnico V1.
           </p>
         </div>
 
         {/* TARJETA 3: GRAN TOTAL CONSOLIDADO */}
-        <div className="odoo-card" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: '#ffffff', borderTop: '4px solid #8b5cf6' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c084fc', textTransform: 'uppercase' }}>
+        <div className="bg-[#0B0F17] border border-slate-800 text-white shadow-sm rounded-xl p-5">
+          <div className="flex justify-between items-center mb-3">
+            <span className="text-xs font-bold text-purple-400 uppercase tracking-wider">
               Oferta Comercial Gran Total EPC
             </span>
-            <div style={{ background: 'rgba(255,255,255,0.1)', padding: '6px', borderRadius: '6px' }}>
-              <Award size={20} color="#c084fc" />
+            <div className="bg-slate-800/80 p-1.5 rounded-md text-purple-300">
+              <Award size={18} />
             </div>
           </div>
-          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.8rem', fontWeight: 800, color: '#38bdf8' }}>
+          <h3 className="m-0 mb-2 text-2xl font-extrabold text-sky-400">
             {formatMoneda(granTotal)}
           </h3>
-          <p style={{ margin: 0, fontSize: '0.8rem', color: '#94a3b8' }}>
+          <p className="m-0 text-xs text-slate-400">
             Suma total consolidada de la propuesta llave en mano (Procura + SSTT).
           </p>
         </div>
@@ -308,22 +286,22 @@ export default function Bloque3_Resumen({
       </div>
 
       {/* MATRIZ ADICIONAL DE GARANTÍAS Y CONTINGENCIAS PRELIMINAR */}
-      <div className="odoo-card" style={{ background: '#ffffff' }}>
-        <h3 style={{ margin: '0 0 15px 0', color: '#0f172a', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <TrendingUp size={20} color="#8b5cf6" /> Desglose de Pólizas y Estructura de Contingencias
+      <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-6">
+        <h3 className="m-0 mb-4 text-sm font-bold text-slate-900 flex items-center gap-2">
+          <TrendingUp size={18} className="text-purple-600" /> Desglose de Pólizas y Estructura de Contingencias
         </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px' }}>
-          <div style={{ padding: '15px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>Póliza de Fiel Cumplimiento (5%)</span>
-            <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>{formatMoneda(granTotal * 0.05)}</span>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <span className="text-xs font-semibold text-slate-600 block mb-1">Póliza de Fiel Cumplimiento (5%)</span>
+            <span className="text-base font-bold text-slate-900">{formatMoneda(granTotal * 0.05)}</span>
           </div>
-          <div style={{ padding: '15px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>Póliza de Anticipo Financiero (20%)</span>
-            <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>{formatMoneda(granTotal * 0.20)}</span>
+          <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <span className="text-xs font-semibold text-slate-600 block mb-1">Póliza de Anticipo Financiero (20%)</span>
+            <span className="text-base font-bold text-slate-900">{formatMoneda(granTotal * 0.20)}</span>
           </div>
-          <div style={{ padding: '15px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>Fondo de Contingencia EPC (3%)</span>
-            <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#8b5cf6' }}>{formatMoneda(granTotal * 0.03)}</span>
+          <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <span className="text-xs font-semibold text-slate-600 block mb-1">Fondo de Contingencia EPC (3%)</span>
+            <span className="text-base font-bold text-purple-700">{formatMoneda(granTotal * 0.03)}</span>
           </div>
         </div>
       </div>
