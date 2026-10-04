@@ -88,7 +88,7 @@ h2 {
   font-weight: 600;
 }
 
-select, input {
+.odoo-card select, .odoo-card input, .form-group select, .form-group input {
   width: 100%;
   padding: 10px 14px;
   background: #f1f5f9;
@@ -100,10 +100,35 @@ select, input {
   transition: all 0.2s;
 }
 
-select:focus, input:focus {
+.odoo-card select:focus, .odoo-card input:focus, .form-group select:focus, .form-group input:focus {
   border-color: var(--accent);
   background: #ffffff;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Dark Theme Inputs for Laboratorio de Precios & Pro Modals */
+.lab-modal input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.lab-modal select {
+  background-color: #131926 !important;
+  color: #f1f5f9 !important;
+  border-color: rgba(51, 65, 85, 0.7) !important;
+}
+
+.lab-modal input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+.lab-modal select:focus {
+  background-color: #162032 !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35) !important;
+}
+
+.lab-modal input::placeholder {
+  color: #64748b !important;
+}
+
+.lab-modal input[type="range"] {
+  background: #1e293b !important;
+  border: none !important;
+  padding: 0 !important;
 }
 
 button.primary-btn {
