@@ -193,7 +193,7 @@ function Bloque2_SSTT({
     };
     setCart(prev => [...prev, newItem]);
     setIsDirty(true);
-    showFeedbackToast('➕ Ítem manual agregado al carrito.');
+    showFeedbackToast('Ítem manual agregado al carrito.');
   };
 
   // Edición Inline directa de descripción y costo
@@ -343,7 +343,7 @@ function Bloque2_SSTT({
     setSearchQuery('');
     setSearchCantidad(1);
     setIsDirty(true);
-    showFeedbackToast(`✅ ${qty}x ${newItem.equipo} agregado.`);
+    showFeedbackToast(`${qty}x ${newItem.equipo} agregado.`);
   };
 
   // ============================================================================
@@ -354,14 +354,14 @@ function Bloque2_SSTT({
     const itemsMacro = buildMacroPaqueteTrafo(30);
     setCart(prev => [...prev, ...itemsMacro]);
     setIsDirty(true);
-    showFeedbackToast(`⚡ Paquete Mantenimiento Trafo inyectado (${itemsMacro.length} ítems).`);
+    showFeedbackToast(`Paquete Mantenimiento Trafo inyectado (${itemsMacro.length} ítems).`);
   };
 
   const handleInjectMacroPCPCompleto = () => {
     const itemsMacro = buildMacroPCPCompleto(30);
     setCart(prev => [...prev, ...itemsMacro]);
     setIsDirty(true);
-    showFeedbackToast(`⚡ Mantenimiento Integral PCP (${itemsMacro.length} ítems) inyectado.`);
+    showFeedbackToast(`Mantenimiento Integral PCP (${itemsMacro.length} ítems) inyectado.`);
   };
 
   const handleAdd = () => {
@@ -440,9 +440,9 @@ function Bloque2_SSTT({
 
     if (needsPriceReview) {
       // Toast de advertencia con instrucción clara — no bloquea el flujo
-      showFeedbackToast(`⚠️ ${item.equipo} no está en el catálogo. Costo en Gs. 0 — revisá el precio en el modal de edición antes de cotizar.`);
+      showFeedbackToast(`${item.equipo} no está en el catálogo. Costo en Gs. 0 — revisá el precio en el modal de edición antes de cotizar.`);
     } else {
-      showFeedbackToast(`✅ ${item.cantidad}x ${item.equipo} (${item.tension}) agregado al carrito.`);
+      showFeedbackToast(`${item.cantidad}x ${item.equipo} (${item.tension}) agregado al carrito.`);
     }
   };
 
@@ -515,7 +515,7 @@ function Bloque2_SSTT({
 
   const handleSaveAdHoc = async () => {
     if (!adHocState.equipo) {
-      showFeedbackToast('⚠️ Ingresá un nombre para el equipo antes de guardar.');
+      showFeedbackToast('Ingresá un nombre para el equipo antes de guardar.');
       return;
     }
     
@@ -923,7 +923,7 @@ function Bloque2_SSTT({
                               onChange={(e) => setOverrideState({...overrideState, incluye_en_logistica: e.target.checked})}
                               style={{ width: '16px', height: '16px', accentColor: '#0284c7' }}
                             />
-                            <span style={{ color: '#0284c7', fontWeight: 600 }}>🚚 Incluir en prorrateo de logística</span>
+                            <span style={{ color: '#0284c7', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}><Truck size={14} /> Incluir en prorrateo de logística</span>
                             <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>(default: NO)</span>
                           </label>
                         </td>
@@ -1259,7 +1259,7 @@ function Bloque2_SSTT({
                             onChange={e => setAdHocState({...adHocState, incluye_en_logistica: e.target.checked})}
                             style={{ width: '15px', height: '15px', accentColor: '#0284c7' }}
                           />
-                          <span style={{ color: '#0284c7', fontWeight: 600 }}>🚚 Incluir en prorrateo de logística</span>
+                          <span style={{ color: '#0284c7', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}><Truck size={14} /> Incluir en prorrateo de logística</span>
                         </label>
                       </td>
                     </tr>
@@ -1323,21 +1323,21 @@ function Bloque2_SSTT({
         {/* COLUMNA IZQUIERDA: MESA DE TRABAJO (60-70%) */}
         <div className="left-panel flex flex-col gap-5">
           
-          {/* NAVEGACIÓN DE PESTAÑAS INTERNAS */}
-          <div className="flex items-center gap-6 border-b border-slate-200 px-1">
+          {/* NAVEGACIÓN DE PESTAÑAS INTERNAS (Segmented Control / Material Tabs) */}
+          <div className="flex bg-slate-100 p-1 rounded-t-xl border border-slate-200 border-b-0 w-max mb-[-1px] relative z-10">
             <button
               type="button"
               onClick={() => setActiveTab('carrito')}
-              className={`pb-3 text-sm flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all cursor-pointer ${
                 activeTab === 'carrito'
-                  ? 'text-blue-600 border-blue-600 font-semibold'
-                  : 'text-slate-500 border-transparent hover:text-slate-700 hover:border-slate-300 font-medium'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
               }`}
             >
               <Calculator size={16} />
-              <span>🛠️ Carrito Técnico y Ensayos</span>
+              <span>Carrito Técnico y Ensayos</span>
               <span className={`text-xs px-2 py-0.5 rounded-md font-bold ${
-                activeTab === 'carrito' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                activeTab === 'carrito' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-500'
               }`}>
                 {cart.length}
               </span>
@@ -1346,14 +1346,14 @@ function Bloque2_SSTT({
             <button
               type="button"
               onClick={() => setActiveTab('logistica')}
-              className={`pb-3 text-sm flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all cursor-pointer ${
                 activeTab === 'logistica'
-                  ? 'text-blue-600 border-blue-600 font-semibold'
-                  : 'text-slate-500 border-transparent hover:text-slate-700 hover:border-slate-300 font-medium'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
               }`}
             >
               <Truck size={16} />
-              <span>🚚 Logística e Indirectos</span>
+              <span>Logística e Indirectos</span>
               {activeAplicarIndirectos && (
                 <span className="text-xs px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 font-bold">
                   {distanciaKm} km
@@ -1364,7 +1364,7 @@ function Bloque2_SSTT({
 
           {/* TAB 1: CARRITO TÉCNICO Y ENSAYOS */}
           {activeTab === 'carrito' && (
-            <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden p-6 relative">
+            <div className="bg-white border border-slate-200 shadow-sm rounded-xl rounded-tl-none overflow-hidden p-6 relative">
               
               {/* Header con Acciones Principales */}
               <div className="flex justify-between items-center mb-5 flex-wrap gap-3">
@@ -1437,7 +1437,7 @@ function Bloque2_SSTT({
                     className="bg-slate-800 hover:bg-slate-700 text-white shadow-sm rounded-lg text-xs font-semibold px-3.5 py-2 flex items-center gap-1.5 transition-all cursor-pointer"
                     title="Inyecta 1x Ensayo Físico-Químico, 1x Cromatografía y 1x Extracción de Muestra de Aceite"
                   >
-                    <Zap size={14} className="text-amber-300" /> ⚡ Paquete Mantenimiento Trafo
+                    <Zap size={14} className="text-amber-400" /> Paquete Mantenimiento Trafo
                   </button>
 
                   <button
@@ -1446,7 +1446,7 @@ function Bloque2_SSTT({
                     className="bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 shadow-sm rounded-lg text-xs font-semibold px-3 py-2 flex items-center gap-1.5 transition-all cursor-pointer"
                     title="Inyecta los 5 puntos del PCP: Ensayos, Cromatografía, Limpiezas, Pruebas y Toma de Muestra"
                   >
-                    <Sparkles size={14} className="text-slate-500" /> ⚡ Mantenimiento Integral PCP (5 Ptos)
+                    <Sparkles size={14} className="text-slate-500" /> Mantenimiento Integral PCP (5 Ptos)
                   </button>
                 </div>
               </div>
@@ -1472,9 +1472,10 @@ function Bloque2_SSTT({
                         handleAddFromDatalist();
                       }
                     }}
-                    placeholder="🔍 Busca: Ensayo Físico-Químico, Cromatografía, Aceite Dieléctrico..."
-                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    placeholder="Busca: Ensayo Físico-Químico, Cromatografía, Aceite Dieléctrico..."
+                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 pl-8"
                   />
+                  <Search size={14} className="text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                   <datalist id="sstt-catalog-datalist">
                     <option value="Ensayo Físico - Químico de aceite aislante según normas ASTM y IEC" />
                     <option value="Análisis de gases disueltos por cromatografía" />
@@ -1521,7 +1522,7 @@ function Bloque2_SSTT({
                     <PackagePlus size={36} className="text-slate-400 mx-auto mb-2" />
                     <p className="text-sm font-semibold text-slate-700 mb-1">El carrito está vacío.</p>
                     <p className="text-xs text-slate-500 m-0">
-                      Usa <strong>⚡ Paquete Mantenimiento Trafo</strong>, el buscador <strong>A la Carta</strong> o <strong>+ Ítem Manual</strong> para comenzar.
+                      Usa <strong>Paquete Mantenimiento Trafo</strong>, el buscador <strong>A la Carta</strong> o <strong>+ Ítem Manual</strong> para comenzar.
                     </p>
                   </div>
                 ) : (
@@ -1578,9 +1579,9 @@ function Bloque2_SSTT({
                                 <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-semibold">Modificado</span>
                               )}
                               {item.needsPriceReview && (
-                                <span className="text-[10px] bg-orange-500 text-white px-2 py-0.5 rounded font-bold animate-pulse"
+                                <span className="text-[10px] bg-orange-500 text-white px-2 py-0.5 rounded font-bold animate-pulse flex items-center gap-1"
                                   title="Este ítem no está en el catálogo. El costo es Gs. 0 — abrí el modal de edición para ajustar el precio antes de enviar la cotización.">
-                                  ⚠️ COSTO PENDIENTE
+                                  <ShieldAlert size={10} /> COSTO PENDIENTE
                                 </span>
                               )}
                             </div>
@@ -1684,7 +1685,7 @@ function Bloque2_SSTT({
 
           {/* TAB 2: LOGÍSTICA E INDIRECTOS */}
           {activeTab === 'logistica' && (
-            <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden p-6 relative">
+            <div className="bg-white border border-slate-200 shadow-sm rounded-xl rounded-tl-none overflow-hidden p-6 relative">
               
               {/* Cabecera con Switch On/Off */}
               <div className="flex justify-between items-center flex-wrap gap-3 mb-5">
@@ -1724,8 +1725,8 @@ function Bloque2_SSTT({
 
               {/* Banner explicativo cuando está en cero */}
               {!activeAplicarIndirectos && (
-                <div className="bg-slate-50 border border-dashed border-slate-300 p-3.5 rounded-lg mb-5 flex items-center gap-3">
-                  <span className="text-lg">💡</span>
+                <div className="bg-slate-50 border border-dashed border-slate-300 p-3.5 rounded-lg mb-5 flex items-start gap-3">
+                  <ShieldAlert size={18} className="text-slate-400 shrink-0 mt-0.5" />
                   <div className="text-xs text-slate-600 leading-relaxed">
                     <strong>Modo Servicios Tercerizados / Sin Despliegue Propio:</strong> La logística, viáticos, hospedajes, peajes e imprevistos están anulados en <strong>0 Gs.</strong> para que el precio de venta refleje exactamente la cotización directa de terceros sin recargos operativos internos.
                   </div>

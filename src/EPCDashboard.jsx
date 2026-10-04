@@ -29,7 +29,11 @@ import {
   ChevronUp,
   Copy,
   RotateCcw,
-  Save
+  Save,
+  Folder,
+  FlaskConical,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
 
 export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLab }) {
@@ -170,7 +174,7 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
 
       const returnedId = await upsertCotizacionV2(cotizacionId, dataToSave);
       setCotizacionId(returnedId);
-      showToast(cotizacionId ? '✓ Oferta actualizada con éxito' : '✓ Cotización guardada exitosamente');
+      showToast(cotizacionId ? 'Oferta actualizada con éxito' : 'Cotización guardada exitosamente');
       if (copilotRef.current) {
         copilotRef.current.celebrarExito('¡Guardado impecable! Cotización asegurada en la DB.');
       }
@@ -279,7 +283,7 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
     setActiveBlock(1);
     setIsBloque0Open(false);
     setShowSavedQuotesPanel(false);
-    showToast(`✅ Cotización "${dg.nombreProyecto || quote.NombreObra || 'Sin nombre'}" cargada.`);
+    showToast(`Cotización "${dg.nombreProyecto || quote.NombreObra || 'Sin nombre'}" cargada.`);
   };
 
   const nuevaCotizacion = () => {
@@ -303,7 +307,7 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
     setTotalServicios(0);
     setActiveBlock(1);
     setIsBloque0Open(true);
-    showToast('✨ Nueva cotización en blanco iniciada.');
+    showToast('Nueva cotización en blanco iniciada.');
   };
 
   const rubros = {
@@ -369,29 +373,6 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
             </select>
           </div>
 
-          <span className="text-slate-700 hidden lg:inline select-none">•</span>
-
-          {/* Selector de Perfil Comercial (Texto Plano Sutil) */}
-          <div className="hidden lg:flex items-center gap-1.5 text-xs font-medium text-slate-400">
-            <span className="text-slate-500 font-mono text-[11px]">Perfil:</span>
-            <button 
-              type="button"
-              onClick={() => setPerfilComercial('b2b')}
-              className={`cursor-pointer transition-colors ${perfilComercial === 'b2b' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'}`}
-              title="Suministro Privado B2B"
-            >
-              B2B
-            </button>
-            <span className="text-slate-700 select-none">/</span>
-            <button 
-              type="button"
-              onClick={() => setPerfilComercial('epc')}
-              className={`cursor-pointer transition-colors ${perfilComercial === 'epc' ? 'text-white font-semibold' : 'text-slate-400 hover:text-slate-200'}`}
-              title="Licitación Corporativa / EPC"
-            >
-              EPC
-            </button>
-          </div>
         </div>
 
         {/* [ ZONA CENTRO: PESTAÑAS DE NAVEGACIÓN PLANAS (TABS) ] */}
@@ -469,7 +450,7 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
             className="text-slate-300 hover:text-white hover:bg-slate-800/50 px-3 py-2 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
             title="Abrir historial de cotizaciones"
           >
-            <span>📂</span>
+            <Folder size={14} className="shrink-0" />
             <span className="hidden sm:inline">Mis Cotizaciones</span>
           </button>
 
@@ -481,7 +462,7 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
               className="text-slate-300 hover:text-white hover:bg-slate-800/50 px-3 py-2 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
               title="Abrir Laboratorio de Costo de Activos"
             >
-              <span>🧪</span>
+              <FlaskConical size={14} className="shrink-0" />
               <span className="hidden sm:inline">Lab Precios</span>
             </button>
           )}
@@ -494,7 +475,7 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
             className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-md text-xs font-semibold shadow-sm transition-all ml-2 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
             title={cotizacionId ? 'Actualizar oferta existente' : 'Guardar nueva cotización'}
           >
-            <span>💾</span>
+            <Save size={14} className="shrink-0" />
             <span>{isSaving ? 'Guardando...' : (cotizacionId ? 'Actualizar' : 'Guardar')}</span>
           </button>
 
@@ -547,7 +528,7 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
       {/* ========================================================================= */}
       {/* 3. ARMONÍA DEL LIENZO (BODY & MAIN CONTENT) */}
       {/* ========================================================================= */}
-      <main className="pt-6 px-6 mx-auto max-w-screen-2xl w-full flex-1 flex flex-col gap-6">
+      <main className="pt-6 pb-16 px-6 mx-auto max-w-screen-2xl w-full flex-1 flex flex-col gap-6">
         
         {/* ================= PASO 1: PROCURA & LANDED COST ================= */}
         {activeBlock === 1 && (
@@ -565,10 +546,10 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
               isSaving={isSaving}
             />
 
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end pt-2 w-full">
               <button 
                 type="button"
-                className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-6 py-2 rounded-lg text-sm font-medium shadow-sm transition-all ml-auto flex items-center gap-2 cursor-pointer" 
+                className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 px-6 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition-all flex items-center gap-2 cursor-pointer" 
                 onClick={() => setActiveBlock(2)}
               >
                 <span>Siguiente: Servicios Técnicos (SSTT)</span>
@@ -581,13 +562,19 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
         {/* ================= PASO 2: SERVICIOS Y SSTT ================= */}
         {activeBlock === 2 && (
           <div className="animate-fade-in flex flex-col gap-6">
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 md:p-6">
-              <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-200">
-                <h2 className="text-blue-900 font-bold text-base flex items-center gap-2 m-0">
-                  <Wrench color="#2563eb" size={20} /> Bloque 2: Servicios Especializados & SSTT
-                </h2>
-                <span className="bg-blue-50 text-blue-700 text-xs px-2.5 py-1 rounded-md font-semibold border border-blue-200/60">
-                  ⚡ Suite V1 Activa
+            <div className="flex flex-col">
+              <div className="flex justify-between items-center mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-700">
+                    <Wrench size={18} />
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-semibold text-slate-900 m-0 leading-tight">Servicios Especializados & SSTT</h1>
+                    <p className="text-xs text-slate-500 m-0">Carrito técnico, logística e indirectos con cálculo financiero en vivo</p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1.5 bg-white text-slate-600 text-xs px-2.5 py-1 rounded-md font-medium border border-slate-200 shadow-sm">
+                  <Zap size={12} className="text-blue-600" /> Motor V1 activo
                 </span>
               </div>
               
@@ -627,7 +614,7 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
                 isSaving={isSaving}
               />
 
-              <div className="flex justify-end items-center gap-3 mt-8 pt-4 border-t border-slate-200">
+              <div className="flex justify-between items-center gap-3 mt-8 pt-4 border-t border-slate-200 w-full">
                 <button 
                   type="button"
                   onClick={() => setActiveBlock(1)}
@@ -637,7 +624,7 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
                 </button>
                 <button 
                   type="button"
-                  className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-6 py-2 rounded-lg text-sm font-medium shadow-sm transition-all cursor-pointer flex items-center gap-2" 
+                  className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 px-6 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition-all cursor-pointer flex items-center gap-2" 
                   onClick={() => setActiveBlock(3)}
                 >
                   <span>Siguiente: Resumen de Cotización</span>
@@ -669,7 +656,7 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
               copilotRef={copilotRef}
             />
             
-            <div className="flex justify-between items-center pt-4 mt-8 border-t border-slate-200">
+            <div className="flex justify-between items-center pt-6 mt-8 border-t border-slate-200 w-full px-2">
               <button 
                 type="button"
                 onClick={() => setActiveBlock(2)}
@@ -681,7 +668,7 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
                 type="button"
                 onClick={guardarCotizacionMaestra}
                 disabled={isSaving}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl text-base font-bold shadow-md transition-all ml-auto flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-full text-base font-bold shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 <Save size={18} />
                 <span>{isSaving ? 'Guardando...' : 'Finalizar y Guardar Cotización'}</span>
@@ -701,8 +688,10 @@ export default function EPCDashboard({ version = 'v2', onSwitchVersion, onOpenLa
 
       {/* FLOATING TOAST NOTIFICATION */}
       {toast.show && (
-        <div className="fixed bottom-6 right-6 z-[9999] bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-2xl font-bold text-sm flex items-center gap-2 border border-emerald-400/30 animate-fadeIn">
-          <span>{toast.type === 'error' ? '❌' : '✅'}</span>
+        <div className="fixed bottom-6 right-6 z-[9999] bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl font-medium text-sm flex items-center gap-2.5 border border-slate-700 animate-fade-in">
+          {toast.type === 'error'
+            ? <XCircle size={16} className="text-red-400 shrink-0" />
+            : <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />}
           <span>{toast.message}</span>
         </div>
       )}

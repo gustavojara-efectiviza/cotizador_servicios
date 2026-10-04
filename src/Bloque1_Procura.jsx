@@ -17,7 +17,8 @@ import {
   Upload,
   Boxes,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Settings
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -418,7 +419,7 @@ export default function Bloque1_Procura({
         });
 
         setEquipos(prev => [...prev, ...newEquipos]);
-        showLocalToast(`✅ Se importaron ${newEquipos.length} equipos desde el archivo Excel.`, 'success');
+        showLocalToast(`Se importaron ${newEquipos.length} equipos desde el archivo Excel.`, 'success');
       } catch (err) {
         console.error(err);
         showLocalToast('Ocurrió un error al procesar el archivo Excel. Asegúrate de usar un archivo .xlsx válido.', 'error');
@@ -498,7 +499,7 @@ export default function Bloque1_Procura({
           }}
         >
           <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#475569', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            ⚙️ Panel de Variables Globales ("Setea y Olvida")
+            <Settings size={16} /> Panel de Variables Globales ("Setea y Olvida")
           </h3>
           <div style={{ color: '#64748b' }}>
             {isSeteaOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
